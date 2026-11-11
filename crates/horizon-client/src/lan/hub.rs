@@ -4061,27 +4061,27 @@ impl Hub {
                 S::AcceptTeleportation(p) => {
                     let recording = self.recording();
                     let g = &mut self.guests[i];
-                    if let Some((id, at)) = g.awaiting_teleport
-                        && id == p.id
-                    {
-                        if p.x.is_nan()
-                            || p.y.is_nan()
-                            || p.z.is_nan()
-                            || !p.yaw.is_finite()
-                            || !p.pitch.is_finite()
-                        {
-                            self.kick(conn, invalid_movement());
-                            continue;
-                        }
-                        g.position = at;
-                        g.awaiting_teleport = None;
-                        // The prediction's replay starts again where the client now is.
-                        if recording {
-                            let kept = g.awaiting_keeps_motion;
-                            g.anticheat
-                                .record
-                                .get_or_insert_default()
-                                .teleported(at, kept);
+                    if let Some((id, at)) = g.awaiting_teleport {
+                        if id == p.id {
+                            if p.x.is_nan()
+                                || p.y.is_nan()
+                                || p.z.is_nan()
+                                || !p.yaw.is_finite()
+                                || !p.pitch.is_finite()
+                            {
+                                self.kick(conn, invalid_movement());
+                                continue;
+                            }
+                            g.position = at;
+                            g.awaiting_teleport = None;
+                            // The prediction's replay starts again where the client now is.
+                            if recording {
+                                let kept = g.awaiting_keeps_motion;
+                                g.anticheat
+                                    .record
+                                    .get_or_insert_default()
+                                    .teleported(at, kept);
+                            }
                         }
                         let rot = (p.yaw, p.pitch);
                         self.position_change(i, [p.x, p.y, p.z], rot, 0, ctx, events);
