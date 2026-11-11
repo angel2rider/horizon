@@ -74,11 +74,12 @@ another project's source may also be read and used, **only when that project's l
 
 - **Allowed:** MIT, MIT-0, BSD-2-Clause, BSD-3-Clause, 0BSD, ISC, zlib, Apache-2.0, Unlicense, and the CC0-1.0
   public-domain dedication. That code may be read, copied or adapted.
-- **Off limits, even to read:** GPL, LGPL (Iris), AGPL, MPL, EPL, Polyform (Sodium), the Creative Commons licenses
-  (CC BY, CC BY-SA, CC BY-NC and the others; CC0 is a public-domain dedication, not one of them), custom or
-  "source available" licenses, all rights reserved (OptiFine), and any project with no license or an unclear one.
-  Don't read, copy, translate or paraphrase their source, and don't send code an AI tool wrote from it. Being able
-  to download a mod or a pack does not give you the right to read its files.
+- **Off limits to copy, translate or paraphrase:** GPL, LGPL (Iris), AGPL, MPL, EPL, Polyform (Sodium), the
+  Creative Commons licenses (CC BY, CC BY-SA, CC BY-NC and the others; CC0 is a public-domain dedication, not one
+  of them), custom or "source available" licenses, all rights reserved (OptiFine), and any project with no license
+  or an unclear one. You may read such source for review or research purposes, but you may not copy, translate,
+  paraphrase, or incorporate it into Horizon. Being able to download a mod or a pack does not give you the right
+  to read its files.
 - **Java's own library is GPL too.** OpenJDK's source (`java.lang.Math`, `StrictMath`, `FdLibm`, `HashMap`, the
   sorts, `Double.toString`, HotSpot's intrinsics...) is GPL-2.0, so it is off limits like the rest. Reproduce Java's
   behaviour from its API documentation (the Javadoc) and from what a JVM returns, or from a permissive original such
