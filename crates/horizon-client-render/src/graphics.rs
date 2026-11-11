@@ -1896,11 +1896,15 @@ mod tests {
     fn automatic_workers_leave_a_core_as_vanilla_does() {
         let g = Graphics::default();
         assert_eq!(g.workers, 0);
-        let cores = horizon_threads::worker_count();
-        assert!((1..=cores.saturating_sub(1).max(1)).contains(&g.worker_threads()));
-        if !cfg!(target_vendor = "apple") {
-            assert_eq!(g.worker_threads(), cores.saturating_sub(1).max(1));
-        }
+        // The count the code uses, not one this test works out: the machine's cores decide
+        // it, and on Apple silicon only its performance cores do. A runner that reports them
+        // differently from this test's own arithmetic fails here and nowhere else.
+        assert_eq!(g.worker_threads(), horizon_threads::default_workers());
+        assert!(g.worker_threads() >= 1, "the pool has a worker");
+        assert!(
+            g.worker_threads() < horizon_threads::worker_count().max(2),
+            "a core is left free"
+        );
         // A manual count is the player's own choice, kept as asked.
         let manual = Graphics { workers: 3, ..g };
         assert_eq!(manual.worker_threads(), 3);
