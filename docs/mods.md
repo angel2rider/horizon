@@ -71,7 +71,7 @@ cargo horizon-mod check target/horizon-mod/my_mod.hmod   # the registry's checks
 
 ### A real-game Recipes check
 
-`python tools/lan_e2e.py --check recipes-hmod --bin-dir PATH` runs two real clients against the
+`python3 tools/lan_e2e.py --check recipes-hmod --bin-dir PATH` runs two real clients against the
 host's integrated server. `PATH` must contain `horizon-client` compiled with the official native
 Recipes mod and a matching `horizon-ctl`. This opt-in check fails if Recipes is absent; ordinary
 LAN runs do not require it.

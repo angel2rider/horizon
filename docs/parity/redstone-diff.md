@@ -7,9 +7,9 @@ only shows in the order things happen across blocks: shape updates against neigh
 ticks against block events, pistons against the blocks they move.
 
 ```
-python tools/redstone_diff.py --machines 48 --seed 1 --ticks 40     # hand-built circuits, then random soups
-python tools/redstone_diff.py --only soup-s1-7 --keep scratch/rd     # one machine, keep the timelines
-python tools/redstone_diff.py --only soup-s1-7 --near 6 1 2 3        # narrow a difference down to a box (DX DY DZ R)
+python3 tools/redstone_diff.py --machines 48 --seed 1 --ticks 40     # hand-built circuits, then random soups
+python3 tools/redstone_diff.py --only soup-s1-7 --keep scratch/rd     # one machine, keep the timelines
+python3 tools/redstone_diff.py --only soup-s1-7 --near 6 1 2 3        # narrow a difference down to a box (DX DY DZ R)
 ```
 
 Needs what `tools/perf_bench.py` needs: your own client jar, a built `horizon-client` and `horizon-ctl`,

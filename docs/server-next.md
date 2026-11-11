@@ -5,7 +5,7 @@ vanilla Java clients welcome and vanilla's rules kept exactly. Two bars:
 
 1. **Better than Pumpkin on every number we can measure**: players at 20 TPS, MSPT p99, memory, bandwidth and
    join time, with Pumpkin's released binary run as a black box against the same bots.
-2. **Vanilla-exact where Pumpkin isn't.** Gameplay is Horizon's engine, checked by its 324 vanilla parity
+2. **Vanilla-exact where Pumpkin isn't.** Gameplay is Horizon's engine, checked by its ~650 vanilla parity
    harnesses (each one runs the real 26.3 jars and Horizon on the same inputs and compares the results).
 
 All of it lives in this repo. Single player's integrated server, LAN, `--dedicated` and the
@@ -141,7 +141,7 @@ Single player runs on the server thread (`game/integrated.rs`, since #1514), so 
 hosts and `--dedicated` share every line of server code: the tick, the levels, the hub, the entity tracker,
 saving. A separate server repo would fork that code or pin it across repos, and either way two copies would
 drift. Gameplay is about 420 000 lines (`game/` 133 k, `mobs/` 62 k, `lan/` 15 k, the flat lib 90 k, and
-`horizon-world` 124 k), guarded by the 324 harnesses. So everything here lands in horizon:
+`horizon-world` 124 k), guarded by the ~650 harnesses. So everything here lands in horizon:
 
 | Part | Where | Shared by |
 |---|---|---|

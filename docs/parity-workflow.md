@@ -145,7 +145,7 @@ One draw too many or too few shifts every later value, so read the first field t
 `tools/parity_fuzz.py` runs small generated scenarios in vanilla and Horizon and reports each divergence once, shrunk, with a reproduction (#12498). A batch of scenarios runs as one command-exec script (`test_command_exec_parity.py --groups-file`). It is a tool to run by hand, not a harness: `parity.py` never selects it.
 
 ```sh
-python3 tools/parity_fuzz.py --smoke --binary target/fast/horizon-client.exe   # fixed scenarios that must match (~30 s)
+python3 tools/parity_fuzz.py --smoke --binary target/fast/horizon-client   # fixed scenarios that must match (~30 s)
 python3 tools/parity_fuzz.py persist --seed 1 --count 60                          # summon or place, unload and reload, read
 python3 tools/parity_fuzz.py spawn --seed 1 --count 60                            # each spawn mechanism, read tick by tick
 python3 tools/parity_fuzz.py --replay scenarios.json                               # run these scenarios (a report's, edited)
