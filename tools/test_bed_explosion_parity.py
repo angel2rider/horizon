@@ -241,10 +241,9 @@ def main():
     metadata = json.loads(subprocess.check_output(['cargo', 'metadata', '--no-deps', '--format-version', '1'], cwd=lab.ROOT, text=True))
     binary = Path(metadata['target_directory']) / 'fast' / ('horizon-client.exe' if os.name == 'nt' else 'horizon-client')
     vanilla_server = ['java', '-Xmx2g', '-Duser.timezone=UTC', '-cp', dependencies, 'net.minecraft.server.Main', 'nogui']
-    horizon_server = [binary, '--resources', lab.LOCAL / 'horizon-client/26.3', '--dedicated', '--nogui']
+    horizon_server = [binary, '--resources', lab.RESOURCES, '--dedicated', '--nogui']
     client = ['java', '-Xmx1g', '-cp', str(classes) + os.pathsep + dependencies, 'dev.horizonlab.parity.KnockbackClient']
     kb.CASES, kb.SETUP, kb.PLAYERS = CASES, SETUP, ('Alice',)
-    kb.PROPERTIES['allow-flight'] = 'true'
     world = generate_world(vanilla_server, build)
     vanilla = compared(kb.run_side('vanilla', vanilla_server, client, build, world))
     horizon = compared(kb.run_side('horizon', horizon_server, client, build, world))
