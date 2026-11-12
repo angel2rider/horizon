@@ -9,6 +9,7 @@ connection state); the report is the authoritative source for them.
 import argparse
 import json
 from pathlib import Path
+import subprocess
 import sys
 
 try:
@@ -69,6 +70,14 @@ def render(report, info):
     return "\n".join(lines) + "\n"
 
 
+def format_rust(text):
+    """`text` as rustfmt formats it, which is how ids.rs is committed."""
+    return subprocess.run(
+        ["rustfmt", "--edition", "2024", "--emit", "stdout"],
+        input=text, capture_output=True, text=True, check=True,
+    ).stdout
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--report", type=Path, default=ROOT / ".local/datagen/out/reports/packets.json")
@@ -76,7 +85,7 @@ def main():
     parser.add_argument("--check", action="store_true", help="exit 1 if --out differs instead of writing it")
     args = parser.parse_args()
     report = json.loads(args.report.read_text())
-    text = render(report, lab.version_info())
+    text = format_rust(render(report, lab.version_info()))
     if args.check:
         if not args.out.exists() or args.out.read_text() != text:
             print(f"{args.out} does not match {args.report}; run tools/generate_packet_ids.py", file=sys.stderr)

@@ -69,7 +69,8 @@ class CheckTests(unittest.TestCase):
                 return gen.main()
 
     def test_a_matching_file_passes(self):
-        text = gen.render(REPORT, INFO)
+        # The committed file is rustfmt-formatted, so --check formats the render too.
+        text = gen.format_rust(gen.render(REPORT, INFO))
         self.assertEqual(self._run(REPORT, text, check=True), 0)
 
     def test_a_different_file_fails(self):
