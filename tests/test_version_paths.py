@@ -4,7 +4,7 @@
 there, never by hand." A path that spells the version out breaks on the next version bump, and
 nothing catches it, because the tools that break are the ones that need the vanilla data to run.
 
-The few places that name a version on purpose (the port tools, which handle older versions) are
+The few places that name a version on purpose (a tool that compares two versions, tests with a lock file of their own) are
 listed in ALLOWED, each with the reason.
 """
 import json
@@ -20,11 +20,6 @@ VERSION = lab.VERSION
 # Files that name a version on purpose, and why.
 ALLOWED = {
     "tools/datapack_upgrade_fidelity.py": "compares 26.2 with 26.3 on purpose",
-    "tools/port_ledger.py": "reads the version from the lock file, with 26.3 as a fallback",
-    "tools/port_report.py": "reports on versions, it does not read one",
-    "tools/port_publish.py": "reports on versions, it does not read one",
-    "tools/port_regen.py": "reports on versions, it does not read one",
-    "tools/version_port.py": "ports a version, it does not read one",
     "tests/test_lab.py": "builds a lock file with a version of its own",
     "tests/test_port_regen.py": "builds a lock file with a version of its own",
 }
