@@ -68,7 +68,7 @@ class VersionPathsTests(unittest.TestCase):
     def test_no_tool_writes_the_pinned_version_in_a_path(self):
         offenders = []
         for path, lines in sources():
-            relative = str(path.relative_to(ROOT))
+            relative = path.relative_to(ROOT).as_posix()
             if relative in ALLOWED:
                 continue
             for number, line in enumerate(lines, 1):
