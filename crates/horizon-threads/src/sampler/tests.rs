@@ -310,9 +310,11 @@ fn a_full_ring_drops_and_counts() {
         "every sample written is drained"
     );
     assert!(stats.dropped > coverage(&stats, 20) as u64, "{stats:?}");
+    // About 100 signals; a loaded runner merges some while one is still pending (59 on main's
+    // run 43595807302). Far above the 4 the ring holds, so the drops are still counted.
     let attempts = stats.samples + stats.dropped;
     assert!(
-        (coverage(&stats, 60)..=coverage(&stats, 140)).contains(&(attempts as usize)),
+        (coverage(&stats, 30)..=coverage(&stats, 140)).contains(&(attempts as usize)),
         "{attempts} signals for 100 ms of CPU: {stats:?}"
     );
 }
