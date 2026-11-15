@@ -24,12 +24,12 @@ find . \( -path ./target -o -path ./.git -o -path "./$dir" \) -prune -o \
 changed=0
 while IFS= read -r -d '' file; do
   [ -e "$file" ] || [ -L "$file" ] || continue
-  touch -h "$file" 2>/dev/null
+  touch -h -- "$file" 2>/dev/null
   changed=$((changed + 1))
   parent="$file"
   while [ "$parent" != "." ] && [ "$parent" != "/" ]; do
-    parent="$(dirname "$parent")"
-    touch "$parent" 2>/dev/null
+    parent="$(dirname -- "$parent")"
+    touch -- "$parent" 2>/dev/null
   done
 done < <(git diff --name-only -z "$sha" HEAD)
 
