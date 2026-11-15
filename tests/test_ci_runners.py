@@ -107,14 +107,21 @@ class OwnRunnerTests(unittest.TestCase):
                 self.assertNotRegex(head, r":\s*write", where)
 
     def test_checks_split_between_both_pools(self):
-        ci = (WORKFLOWS / "ci.yml").read_text()
-        verify = dict(jobs(ci))["verify"]
-        value = runs_on(verify)
+        ci = dict(jobs((WORKFLOWS / "ci.yml").read_text()))
+        value = runs_on(ci["launcher"])
         # A pull request by the last digit of its number unless SELF_HOSTED_CI=all; main's pushes keep GitHub's cache.
         self.assertIn("github.event_name == 'pull_request' && ", value)
         self.assertIn("vars.SELF_HOSTED_CI == 'all'", value)
         self.assertIn("endsWith(format('{0}', github.event.pull_request.number), '0')", value)
-        self.assertEqual(value, runs_on(dict(jobs(ci))["launcher"]))
+        # Half of the merge queue's groups, by the last digit of the pull request number in the queue's branch name.
+        self.assertIn("github.event_name == 'merge_group' && (contains(github.event.merge_group.head_ref, '0-')", value)
+        # verify's parts go where the launcher goes; verify itself only waits for them.
+        for part in ("verify-tree", "verify-lint", "verify-test"):
+            with self.subTest(part=part):
+                self.assertEqual(runs_on(ci[part]), value)
+        self.assertIn("needs: [verify-tree, verify-lint, verify-test]", ci["verify"])
+        # Never skipped: GitHub counts a skipped required check as passed.
+        self.assertIn("if: always()", ci["verify"])
 
     def test_forks_never_wait_for_our_checks_runners(self):
         # A fork's run sees no repository variable, so SELF_HOSTED_CI can't send it elsewhere when the desktop is off:
@@ -140,9 +147,11 @@ class NativeClippyTests(unittest.TestCase):
         # The workflow is a machine-consumed contract: both platforms must check every requested crate.
         workflow = dict(jobs((WORKFLOWS / "ci.yml").read_text()))
         native = workflow["native-clippy"]
-        self.assertIn("rust: ${{ steps.rust.outputs.required }}", workflow["verify"])
-        self.assertIn("needs: verify", native)
-        self.assertIn("if: needs.verify.outputs.rust != 'false'", native)
+        self.assertIn("rust: ${{ steps.rust.outputs.required }}", workflow["verify-lint"])
+        self.assertIn("id: rust", workflow["verify-lint"])
+        self.assertNotIn("outputs:", workflow["verify"])
+        self.assertIn("needs: verify-lint", native)
+        self.assertIn("if: needs.verify-lint.outputs.rust != 'false'", native)
         self.assertEqual(runs_on(native), "${{ matrix.os }}")
         hosts = re.search(r"os: \[([^\]]+)\]", native).group(1).split(", ")
         self.assertEqual(set(hosts), {"windows-latest", "macos-latest"})
