@@ -60,6 +60,10 @@ impl Game<'_> {
                     .iter()
                     .any(|slot| matches!(slot, PassengerSlot::Live(rider) if *rider == id))
                     && self.passenger_object_present(vehicle))
+                (self.passenger_object_present(vehicle)
+                    && slots
+                        .iter()
+                        .any(|slot| matches!(slot, PassengerSlot::Live(rider) if *rider == id)))
                 .then_some(vehicle)
             })
     }
@@ -165,13 +169,15 @@ impl Game<'_> {
             if !self.passenger_creatable(&tag) {
                 continue;
             }
-            let is_mob = entity_nbt::kind(&tag)
-                .is_some_and(|kind| self.res.mob_types().contains_key(&kind));
-            if !is_mob
-                && entity_nbt::uuid(&tag).is_some_and(|u| self.target_with_uuid(u).is_some())
+            let is_mob =
+                entity_nbt::kind(&tag).is_some_and(|kind| self.res.mob_types().contains_key(&kind));
+            if !is_mob && entity_nbt::uuid(&tag).is_some_and(|u| self.target_with_uuid(u).is_some())
             {
                 // Non-mob disk duplicates retain their saved slot, not a new resident.
-                self.persist.passenger_slots.entry(vehicle).or_default()
+                self.persist
+                    .passenger_slots
+                    .entry(vehicle)
+                    .or_default()
                     .push(PassengerSlot::Saved(tag));
                 continue;
             }
@@ -200,8 +206,8 @@ impl Game<'_> {
             {
                 self.load_other(tag, &kind);
             }
-            let Some(id) = ((before + 1)..=self.next_entity)
-                .find(|id| self.passenger_object_present(*id))
+            let Some(id) =
+                ((before + 1)..=self.next_entity).find(|id| self.passenger_object_present(*id))
             else {
                 if let Some(unknown) = self.persist.unknown.get_mut(&key) {
                     unknown.truncate(unknown_before);
