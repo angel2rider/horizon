@@ -67,13 +67,16 @@ class PublishTests(unittest.TestCase):
                 publish.assert_no_code("intro\n" + line + "\nend\n")
         publish.assert_no_code("Methods added: `foo()`\n")
 
-    def test_a_lost_start_marker_does_not_wipe_human_notes(self):
-        generated = publish.START + "new generated\n" + publish.END
-        existing = "IMPORTANT human note about workaround\n\nold generated text\n" + publish.END + "\nMore human notes\n"
-        result = publish.merged(existing, generated)
-        self.assertIn("IMPORTANT human note about workaround", result)
-        self.assertIn("More human notes", result)
-        self.assertNotIn("old generated text", result)
+    def test_a_single_marker_keeps_all_ambiguous_text(self):
+        generated = publish.START + "\nnew generated\n" + publish.END
+        head = ("IMPORTANT human note about workaround\n\nA second human paragraph.\n"
+                "Minecraft 26.3 → 26.4: a contributor's explanation.\n")
+        tail = "\n\nThe full diff is attached to my notes.\n\nMore human notes\n"
+        for before, marker, after in [(head + "old generated text\n", publish.END, tail),
+                                      (head, publish.START, "\nold generated text" + tail)]:
+            with self.subTest(marker=marker):
+                self.assertEqual(publish.merged(before + marker + after, generated),
+                                 before + generated + after)
 
     def test_update_keeps_what_people_wrote(self):
         existing = f"Notes from a contributor.\n{publish.START}\nold\n{publish.END}\nMore notes."

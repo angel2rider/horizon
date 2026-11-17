@@ -150,28 +150,16 @@ def assert_no_code(text):
 def merged(existing, generated):
     """An issue's body with its generated part replaced, the rest kept.
 
-    A manual edit can remove one of the markers. In that case still keep the human-written lines
-    around the generated block: returning `generated` alone would wipe notes people added.
+    A manual edit can remove one of the markers. Without both boundaries, no existing text can
+    safely be identified as generated: replace only the remaining marker and keep all other text.
     """
     if existing and START in existing and END in existing:
         head, rest = existing.split(START, 1)
         return head + generated.strip() + rest.split(END, 1)[1]
     if not existing or (START not in existing and END not in existing):
         return generated
-    if END in existing:
-        head, tail = existing.split(END, 1)
-        kept = []
-        for line in head.splitlines():
-            if not line.strip() or line.startswith(START) or ("Minecraft " in line and "→" in line):
-                break
-            kept.append(line)
-        return "\n".join(kept).rstrip() + "\n" + generated.strip() + "\n" + tail.lstrip("\n")
-    head, tail = existing.split(START, 1) if START in existing else (existing, "")
-    kept = [line for line in head.splitlines()
-            if line.strip() and not line.startswith(START) and not ("Minecraft " in line and "→" in line)]
-    after = [line for line in tail.splitlines()
-             if line.strip() and not ("Minecraft " in line and "→" in line) and not line.startswith("The full diff")]
-    return "\n".join([*kept, generated.strip(), *after]) + "\n"
+    marker = START if START in existing else END
+    return existing.replace(marker, generated.strip(), 1)
 
 
 def tracking_body(report, issues, others, limit=200):
