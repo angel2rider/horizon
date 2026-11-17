@@ -34,15 +34,9 @@ class IgnoredInventory(unittest.TestCase):
                 'mod tests { include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/ignored_case.rs")); }\n')
             put("crates/horizon-relay/src/ignored_case.rs",
                 '#[test] #[ignore = "needs prepared resources"] fn otherwise_unselected() {}\n')
-            # The canonical discovery runs a Rust tool via Cargo; this pure-Python regression builds the
-            # records it would emit for the two sources above, so no build or prepared data is needed.
-            functions = (
-                ignored_inventory.Test("horizon-client", "lib",
-                                       "crates/horizon-client/src/game/blocks/widget_parts/tests.rs", 1,
-                                       "game::widget::tests::daily_test", "daily", True),
-                ignored_inventory.Test("horizon-relay", "lib", "crates/relay-shared/src/ignored_case.rs", 1,
-                                       "tests::otherwise_unselected", "needs prepared resources", True),
-            )
+            # Exercise the real source-only traversal: flattened game modules, explicit lib paths,
+            # both include! forms, and fake tests in strings/comments. It never builds the game.
+            functions = ignored_inventory.tests(root)
             self.assertEqual(len(functions), 2)
             daily = ignored_tests.Row("horizon-client", "game::widget::tests::daily_test", "lib", "daily",
                                       "daily-horizon-client.txt", "resources")
