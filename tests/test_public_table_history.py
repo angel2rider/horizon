@@ -79,6 +79,30 @@ class PublicTableHistoryTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 1, result.stderr)
                 self.assertIn("fixtures/new_table.json", result.stderr)
 
+    def test_merge_only_table_then_delete_is_rejected_by_publication_modes(self):
+        self.git("init", "-q", "-b", "main")
+        base = self.commit("README.md", "public fixture\n")
+        self.git("switch", "-q", "-c", "side")
+        self.commit("side.txt", "side\n")
+        self.git("switch", "-q", "main")
+        self.commit("main.txt", "main\n")
+        self.git("merge", "--no-ff", "--no-commit", "side")
+        # Neither parent has the table: only the merge's tree introduces it.
+        self.commit("fixtures/merge_table.json", table_text(60))
+        self.git("rm", "-q", "fixtures/merge_table.json")
+        self.git("commit", "-q", "-m", "delete merge table")
+        clean = self.check()
+        self.assertEqual(clean.returncode, 0, clean.stderr)
+
+        head = self.git("rev-parse", "HEAD")
+        push = f"refs/heads/main {head} refs/heads/main {base}\n"
+        for mode, input in ((["--range", f"{base}..HEAD"], None),
+                            (["--history"], None), (["--pre-push"], push)):
+            with self.subTest(mode=mode):
+                result = self.check(*mode, input=input)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn("fixtures/merge_table.json", result.stderr)
+
     def test_legacy_baseline_blob_and_legal_files_are_not_rejected(self):
         self.git("init", "-q", "-b", "main")
         legacy = table_text(60)

@@ -110,9 +110,12 @@ def candidate_blobs(revisions, baseline):
     # Pickaxe shortlist: -G keeps a commit whose patch text has an added or removed line matching a
     # fingerprint. A table introduced by the published revisions therefore appears even when the same
     # commit deletes another table (whose matching line is removed, so the commit still matches -G).
-    # Inspecting only those commits avoids reading every changed blob in a long history.
+    # Include merge-parent diffs in this shortlist too, or a table added only by the merge's tree
+    # is skipped before the merge-aware raw scan below. Inspecting only those commits avoids reading
+    # every changed blob in a long history.
     combined = "|".join(f"({pattern})" for pattern in TABLE_FINGERPRINTS)
-    interesting = git_output("log", "--format=%H", "-G", combined, *revisions).decode().split()
+    interesting = git_output("log", "--format=%H", "-m", "--no-renames", "-G", combined,
+                             *revisions, "--").decode().split()
     if not interesting:
         return []
     # Full object ids: baseline blobs come from ls-tree (40 hex in SHA-1, 64 in SHA-256 repos), so a
