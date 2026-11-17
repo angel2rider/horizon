@@ -55,6 +55,26 @@ class PublishTests(unittest.TestCase):
         publish.assert_no_code("- `<init>(Lnet/minecraft/core/RegistryAccess;Lnet/minecraft/world/Foo;)V`, `a()V`")
         publish.assert_no_code("- `ParityData.java:45: cannot find symbol: variable WORLD (class RegistryLayer)`")
 
+    def test_a_non_compile_failure_diagnostic_reaches_the_issue(self):
+        item = {"rank": 1, "kind": "regen-failed", "title": "Generator foo: failed on 26.4",
+                "files": ["crates/foo.rs"], "error": "Traceback:\nKeyError: bar"}
+        text = publish.body(item, REPORT, DIFF, "/tmp/store")
+        self.assertIn("KeyError: bar", text)
+
+    def test_a_plain_java_statement_is_refused(self):
+        for line in ("    int remaining = 42;", "        doThing();", "    this.field = 12345;", "        foo(bar);"):
+            with self.assertRaises(ValueError, msg=line):
+                publish.assert_no_code("intro\n" + line + "\nend\n")
+        publish.assert_no_code("Methods added: `foo()`\n")
+
+    def test_a_lost_start_marker_does_not_wipe_human_notes(self):
+        generated = publish.START + "new generated\n" + publish.END
+        existing = "IMPORTANT human note about workaround\n\nold generated text\n" + publish.END + "\nMore human notes\n"
+        result = publish.merged(existing, generated)
+        self.assertIn("IMPORTANT human note about workaround", result)
+        self.assertIn("More human notes", result)
+        self.assertNotIn("old generated text", result)
+
     def test_update_keeps_what_people_wrote(self):
         existing = f"Notes from a contributor.\n{publish.START}\nold\n{publish.END}\nMore notes."
         self.assertEqual(publish.merged(existing, f"{publish.START}\nnew\n{publish.END}\n"),

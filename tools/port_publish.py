@@ -79,6 +79,9 @@ def body(item, report, diff, store_path, limit=25):
         lines.append(f"Run: `{item['command']}`")
     if item.get("compile_errors"):
         lines += ["javac, against " + new + ":", *(f"- `{e}`" for e in item["compile_errors"])]
+    if item.get("error"):
+        # A generator or prepare can fail for a non-compile reason: this is the only diagnostic there is.
+        lines.append("Failure: `" + " / ".join(str(item["error"]).splitlines()[:4])[:400] + "`")
     if item.get("failed"):
         lines.append(f"Harnesses failing on {new}: " + ", ".join(f"`{h}`" for h in item["failed"])
                      + (f" (oracle no longer compiles: {', '.join(item['oracle'])})" if item.get("oracle") else ""))
@@ -132,6 +135,11 @@ def assert_no_code(text):
     for line in text.splitlines():
         if any(QUOTED_CODE.search(span) for span in re.findall(r"`([^`]*)`", line)):
             raise ValueError(f"Refusing to publish a quoted span that reads like source code: {line[:120]!r}")
+        # A plain declaration, assignment or call is Java source too. `prose` below has the trailing
+        # `;` stripped, so checking it alone cannot see the usual statement terminator.
+        if re.search(r"\b(?:int|long|boolean|double|float|char|byte|short|String|var)\s+\w+\s*="
+                     r"|\b\w+(?:\.\w+)*\s*=\s*[^=]|\b\w+\([^()]*\)\s*;\s*$", line):
+            raise ValueError(f"Refusing to publish a line that reads like source code: {line[:120]!r}")
         prose = re.sub(r"`[^`]*`", "", line).strip(" -*,;:()")
         if line.startswith("<!--") or not prose:
             continue
@@ -140,11 +148,30 @@ def assert_no_code(text):
 
 
 def merged(existing, generated):
-    """An issue's body with its generated part replaced, the rest kept."""
+    """An issue's body with its generated part replaced, the rest kept.
+
+    A manual edit can remove one of the markers. In that case still keep the human-written lines
+    around the generated block: returning `generated` alone would wipe notes people added.
+    """
     if existing and START in existing and END in existing:
         head, rest = existing.split(START, 1)
         return head + generated.strip() + rest.split(END, 1)[1]
-    return generated
+    if not existing or (START not in existing and END not in existing):
+        return generated
+    if END in existing:
+        head, tail = existing.split(END, 1)
+        kept = []
+        for line in head.splitlines():
+            if not line.strip() or line.startswith(START) or ("Minecraft " in line and "→" in line):
+                break
+            kept.append(line)
+        return "\n".join(kept).rstrip() + "\n" + generated.strip() + "\n" + tail.lstrip("\n")
+    head, tail = existing.split(START, 1) if START in existing else (existing, "")
+    kept = [line for line in head.splitlines()
+            if line.strip() and not line.startswith(START) and not ("Minecraft " in line and "→" in line)]
+    after = [line for line in tail.splitlines()
+             if line.strip() and not ("Minecraft " in line and "→" in line) and not line.startswith("The full diff")]
+    return "\n".join([*kept, generated.strip(), *after]) + "\n"
 
 
 def tracking_body(report, issues, others, limit=200):
