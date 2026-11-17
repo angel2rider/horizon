@@ -41,6 +41,12 @@ class NoProtocolLiteralTests(unittest.TestCase):
 class VarintTests(unittest.TestCase):
     """VarInts are signed 32-bit ints: parse_varint must match Java/net_capture, not decode unsigned."""
 
+    def test_sixth_byte_varints_are_refused(self):
+        for raw in ("808080808001", "ffffffff8f00", "8080808080"):
+            with self.subTest(raw=raw):
+                with self.assertRaisesRegex(ValueError, "varint too long"):
+                    probe.parse_varint(bytes.fromhex(raw))
+
     def test_negative_varints_decode_as_signed(self):
         for n in (-1, -2147483648, 0, 2147483647):
             with self.subTest(n=n):

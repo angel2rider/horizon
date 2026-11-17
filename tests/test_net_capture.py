@@ -1,5 +1,6 @@
 """Protocol framing and state transitions of the offline capture proxy."""
 import io
+import json
 import threading
 import unittest
 
@@ -14,8 +15,26 @@ class VarIntTests(unittest.TestCase):
 
 
 class StateTests(unittest.TestCase):
-    def test_play_start_configuration_reenters_configuration(self):
-        session = net_capture.Session(1, io.StringIO(), {}, threading.Lock(), full=False)
+    def test_play_start_configuration_keeps_acknowledgment_in_play(self):
+        out = io.StringIO()
+        names = {
+            ("play", "clientbound"): ["start_configuration"],
+            ("play", "serverbound"): ["configuration_acknowledged"],
+            ("configuration", "clientbound"): ["registry_data"],
+            ("configuration", "serverbound"): ["finish_configuration"],
+        }
+        session = net_capture.Session(1, out, names, threading.Lock(), full=False)
         session.state["clientbound"] = session.state["serverbound"] = "play"
-        session.transition("clientbound", "start_configuration", b"")
+        session.record("clientbound", 0, b"")
+        self.assertEqual(session.state, {"clientbound": "configuration", "serverbound": "play"})
+        session.record("clientbound", 0, b"")
+        session.record("serverbound", 0, b"")
         self.assertEqual(session.state, {"clientbound": "configuration", "serverbound": "configuration"})
+        session.record("serverbound", 0, b"")
+        entries = [json.loads(line) for line in out.getvalue().splitlines()]
+        self.assertEqual([(e["state"], e["name"]) for e in entries], [
+            ("play", "start_configuration"),
+            ("configuration", "registry_data"),
+            ("play", "configuration_acknowledged"),
+            ("configuration", "finish_configuration"),
+        ])

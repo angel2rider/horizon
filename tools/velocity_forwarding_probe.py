@@ -63,7 +63,7 @@ def parse_varint(buf, i=0):
             if n & 0x80000000:  # Minecraft VarInts are signed 32-bit ints (as in net_capture.read_varint)
                 n -= 1 << 32
             return n, i
-        if shift > 35:  # a VarInt is at most 5 bytes
+        if shift >= 35:  # a fifth continuation group would require a sixth byte
             raise ValueError("varint too long")
 
 
