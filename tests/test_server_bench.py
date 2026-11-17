@@ -113,6 +113,47 @@ class PumpkinConfigTests(unittest.TestCase):
         # Only its own section's keys change: Bedrock keeps its (it is off).
         self.assertIn('address = "0.0.0.0:19132"\nonline_mode = true', text)
 
+    def test_settings_absent_from_the_template_are_inserted(self):
+        # A trimmed template lacks encryption, max_players and simulation_distance. Keeping them out would
+        # leave Pumpkin's upstream defaults in place, so all declared values must still land in the output.
+        minimal = '''seed = "old"
+white_list = true
+
+[networking.java]
+address = "0.0.0.0:25565"
+online_mode = true
+view_distance = 16
+
+[telemetry]
+enabled = true
+'''
+        text = pumpkin_config(minimal, 25599, SimpleNamespace(seed=12345))
+        java = text.split('[networking.java]')[1].split('[')[0]
+        self.assertIn('seed = "12345"', text)
+        self.assertIn('white_list = false', text)
+        for line in ('address = "127.0.0.1:25599"', 'online_mode = false', 'encryption = false',
+                     'max_players = 200', 'view_distance = 10', 'simulation_distance = 10'):
+            self.assertIn(line, java)
+        self.assertIn('[telemetry]\nenabled = false\nendpoint = ""', text)
+        # Each inserted key appears once: present keys were replaced, not duplicated.
+        self.assertEqual(java.count('encryption ='), 1)
+        self.assertEqual(java.count('max_players ='), 1)
+        self.assertEqual(java.count('simulation_distance ='), 1)
+
+    def test_a_section_missing_from_the_template_is_created(self):
+        # No [networking.query] or [telemetry] at all: the whole section must be added with every key.
+        minimal = '''seed = "12345"
+
+[networking.java]
+address = "0.0.0.0:25565"
+'''
+        text = pumpkin_config(minimal, 25599, SimpleNamespace(seed=12345))
+        self.assertIn('[networking.java]\naddress = "127.0.0.1:25599"', text)
+        self.assertIn('[networking.query]\nenabled = false\naddress = "127.0.0.1:25600"', text)
+        self.assertIn('[telemetry]\nenabled = false\nendpoint = ""', text)
+        self.assertIn('[plugins]\nenabled = false', text)
+        self.assertIn('[networking.java.authentication]\nenabled = false', text)
+
 
 class FakeServer:
     """The console and the log of a server that prints what Horizon prints."""
