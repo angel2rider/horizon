@@ -21,7 +21,7 @@ def manifest(version, client, server, java=25):
 
 class StatusTests(unittest.TestCase):
     def test_a_newly_generated_untracked_output_is_regenerated(self):
-        with tempfile.TemporaryDirectory(dir='/tmp/opencode', prefix='port-regen-') as folder:
+        with tempfile.TemporaryDirectory(prefix='port-regen-') as folder:
             root = Path(folder)
             for args in (('init', '-q'), ('config', 'user.email', 'test@example.invalid'),
                          ('config', 'user.name', 'test')):
