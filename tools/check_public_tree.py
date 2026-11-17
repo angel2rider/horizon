@@ -107,25 +107,19 @@ def candidate_blobs(revisions, baseline):
     paths are seen, and -m includes merge-resolution-only changes. Only the changed blobs are read,
     never a full tree per commit.
     """
-    # Pickaxe shortlist: -G keeps a commit whose patch text has an added or removed line matching a
-    # fingerprint. A table introduced by the published revisions therefore appears even when the same
-    # commit deletes another table (whose matching line is removed, so the commit still matches -G).
-    # Include merge-parent diffs in this shortlist too, or a table added only by the merge's tree
-    # is skipped before the merge-aware raw scan below. Inspecting only those commits avoids reading
-    # every changed blob in a long history.
-    combined = "|".join(f"({pattern})" for pattern in TABLE_FINGERPRINTS)
-    interesting = git_output("log", "--format=%H", "-m", "--no-renames", "-G", combined,
-                             *revisions, "--").decode().split()
-    if not interesting:
-        return []
+    # Raw merge-parent diffs enumerate the actual outgoing blobs without constructing patches.
+    # A -G shortlist without merge diffs misses merge-only additions; adding -m makes it spend
+    # minutes diffing every large historical merge. Scan each unique changed blob instead, with
+    # table_blobs()' cheap literal filters before the fingerprint regexes. This keeps every merge
+    # parent and the full published history in scope, including tables later deleted.
     # Full object ids: baseline blobs come from ls-tree (40 hex in SHA-1, 64 in SHA-256 repos), so a
     # truncated candidate id would never compare equal and a grandfathered blob would look new.
-    out = git_output("show", "--format=", "--raw", "-z", "-m", "--no-renames", "--no-abbrev",
-                     *interesting, "--")
+    out = git_output("log", "--format=", "--raw", "-z", "-m", "--no-renames", "--no-abbrev",
+                     *revisions, "--")
     fields = out.decode("utf-8", "surrogateescape").split("\0")
-    candidates = []
+    candidates = set()
     for index in range(0, len(fields) - 1, 2):
-        metadata, path = fields[index], fields[index + 1]
+        metadata, path = fields[index].lstrip("\n"), fields[index + 1]
         if not metadata.startswith(":") or not path:
             continue
         parts = metadata[1:].split()
@@ -135,8 +129,8 @@ def candidate_blobs(revisions, baseline):
         # Retired paths are the documented legacy exception: allowed in history, denied in the tree.
         if path in RETIRED_TABLES or blob in baseline:
             continue
-        candidates.append((path, blob))
-    return candidates
+        candidates.add((path, blob))
+    return sorted(candidates)
 
 
 def table_blobs(shas):
