@@ -1,4 +1,7 @@
+import contextlib
+import io
 from pathlib import Path
+import tempfile
 import unittest
 from unittest import mock
 
@@ -20,3 +23,32 @@ class CargoExampleTests(unittest.TestCase):
         run.assert_called_once_with(
             ['cargo', 'run', '-q', '-j3', '-p', 'horizon-world', '--example', 'world_probe', '--', 'loot_probe', '42'],
             check=True, cwd=interaction_lab.lab.ROOT)
+
+
+class CompareTests(unittest.TestCase):
+    def test_truncated_rust_output_is_a_failure(self):
+        cases = [{'i': i} for i in range(5)]
+        with tempfile.TemporaryDirectory() as d:
+            native = Path(d) / 'native.txt'
+            rust = Path(d) / 'rust.txt'
+            native.write_text(''.join(f'line{i}\n' for i in range(5)))
+            rust.write_text(''.join(f'line{i}\n' for i in range(2)))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                total = interaction_lab.compare(cases, native, rust, key=lambda case, a: case['i'])
+        self.assertGreater(total, 0)
+        self.assertIn('line counts differ', out.getvalue())
+        self.assertNotIn('5/5 cases match', out.getvalue())
+
+    def test_equal_length_outputs_compare_normally(self):
+        cases = [{'i': i} for i in range(5)]
+        with tempfile.TemporaryDirectory() as d:
+            native = Path(d) / 'native.txt'
+            rust = Path(d) / 'rust.txt'
+            native.write_text(''.join(f'line{i}\n' for i in range(5)))
+            rust.write_text(''.join(f'line{i}\n' if i != 3 else 'changed\n' for i in range(5)))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                total = interaction_lab.compare(cases, native, rust, key=lambda case, a: case['i'])
+        self.assertEqual(total, 1)
+        self.assertIn('4/5 cases match', out.getvalue())
