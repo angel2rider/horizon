@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 import re
 import sys
+import unicodedata
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,7 +48,12 @@ def headings(text):
             if explicit:
                 yield explicit[1], explicit[2]
                 continue
-            slug = re.sub(r"[^\w\- ]", "", title.lower()).replace(" ", "-")
+            # mdBook deunicodes a heading before it makes the ASCII anchor, so a heading with a
+            # non-ASCII letter never yields an id like "café-guide". Fold the lower-cased title to
+            # ASCII first, then apply the same slug rules, so validation agrees with the rendered
+            # book. Pure-ASCII titles are unchanged.
+            folded = unicodedata.normalize("NFKD", title.lower()).encode("ascii", "ignore").decode()
+            slug = re.sub(r"[^\w\- ]", "", folded).replace(" ", "-")
             n = counts[slug]
             counts[slug] += 1
             yield title, slug + (f"-{n}" if n else "")
