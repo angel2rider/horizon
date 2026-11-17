@@ -200,9 +200,48 @@ def guarded_patterns(codeowners: str) -> list[str]:
     return sorted(set(found + ALWAYS_GUARDED))
 
 
+def _pattern_regex(pattern: str, *, folder: bool = False) -> re.Pattern:
+    """CODEOWNERS' shell-style pattern: `*` and `?` stay inside one segment, `**/` spans zero or more.
+
+    `**/` must match zero folders too (`/packages/**/x.rs` guards `packages/x.rs`), and a folder
+    pattern must match any path under the named directory.
+    """
+    parts, i = [], 0
+    while i < len(pattern):
+        if pattern.startswith('**/', i):
+            parts.append('(?:.*/)?')
+            i += 3
+        elif pattern.startswith('**', i):
+            parts.append('.*')
+            i += 2
+        elif pattern[i] == '*':
+            parts.append('[^/]*')
+            i += 1
+        elif pattern[i] == '?':
+            parts.append('[^/]')
+            i += 1
+        else:
+            parts.append(re.escape(pattern[i]))
+            i += 1
+    return re.compile('^' + ''.join(parts) + ('/' if folder else '$'))
+
+
 def guarded(path: str, patterns: list[str]) -> bool:
     p = "/" + path.lstrip("/")
-    return any(p.startswith(pat) if pat.endswith("/") else p == pat for pat in patterns)
+    for pat in patterns:
+        if pat.endswith("/"):
+            if "*" in pat or "?" in pat:
+                if _pattern_regex(pat.rstrip("/"), folder=True).match(p):
+                    return True  # a wildcard folder guards every file below it
+            elif p.startswith(pat):
+                return True
+        elif "*" in pat or "?" in pat:
+            pattern = _pattern_regex(pat)
+            if pattern.match(p) or any(pattern.match(p[:end]) for end, char in enumerate(p) if char == "/"):
+                return True  # a wildcard that names a directory guards everything under it
+        elif p == pat or p.startswith(pat + "/"):
+            return True  # CODEOWNERS also applies a directory path written without its trailing slash
+    return False
 
 
 @dataclass

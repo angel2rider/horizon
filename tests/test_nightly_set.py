@@ -223,6 +223,23 @@ class RefusalTests(unittest.TestCase):
             self.assertFalse(ns.guarded(path, PATTERNS), path)
         self.assertTrue(ns.guarded("tools/ci/x.py", ns.guarded_patterns("")))  # even without CODEOWNERS
 
+    def test_wildcard_and_slashless_directory_patterns_guard_descendants(self):
+        patterns = ns.guarded_patterns('/packages/** @council\n/council-only @council\n/tools/ci/*.py @council\n')
+        self.assertTrue(ns.guarded('packages/x/y.rs', patterns))
+        self.assertTrue(ns.guarded('council-only/notes/x.md', patterns))
+        self.assertTrue(ns.guarded('tools/ci/nightly_set.py', patterns))
+        self.assertFalse(ns.guarded('packages-dev/x.rs', patterns))
+        self.assertFalse(ns.guarded('council-only-other/x.md', patterns))
+
+    def test_wildcard_folder_patterns_guard_every_file_under_them(self):
+        patterns = ns.guarded_patterns('/packages/*/ @council\n/packages/**/x.rs @council\n')
+        self.assertTrue(ns.guarded('packages/x/a.rs', patterns))
+        self.assertTrue(ns.guarded('packages/x.rs', patterns))  # **/ matches zero folders
+        self.assertTrue(ns.guarded('packages/a/b/x.rs', patterns))
+        self.assertFalse(ns.guarded('other/x/a.rs', patterns))  # negative control
+        self.assertFalse(ns.guarded('other/x/y/a.rs', patterns))  # the folder must be under packages/
+
+
     def test_a_set_with_a_refused_pull_request_changes_nothing(self):
         state = {"prs": []}
         bad = [pr(2, files=["tools/ci/nightly.py"]), pr(3, state="closed"), pr(4, state="merged"), pr(5, base="x")]
