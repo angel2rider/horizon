@@ -63,10 +63,14 @@ class KnownPacksVerdictTest(unittest.TestCase):
         with self.assertRaises(vw.Failed):
             vw.rule_known_packs_as_vanilla(entries)
 
-    def test_matching_head_only_payloads_pass(self):
-        entries = exchange({'head': 'aaaaaaaa'}, {'head': 'aaaaaaaa'})
-        self.assertEqual(vw.rule_known_packs_as_vanilla(entries),
-                         'answered with the packs offered (minecraft:core)')
+    def test_matching_prefixes_cannot_prove_complete_payloads_equal(self):
+        prefix = 'aa' * 512
+        for client_size in (5000, 6000):
+            with self.subTest(client_size=client_size):
+                entries = exchange({'size': 5000, 'head': prefix},
+                                   {'size': client_size, 'head': prefix})
+                with self.assertRaises(vw.Failed):
+                    vw.rule_known_packs_as_vanilla(entries)
 
     def test_matching_full_payloads_pass(self):
         entries = exchange({'data': '0a056d696e656372616674'}, {'data': '0a056d696e656372616674'})
