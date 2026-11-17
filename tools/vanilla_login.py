@@ -90,8 +90,8 @@ def join(host, port, name, seconds):
         pid, data = c.receive()
         if pid == 15:  # select known packs: claim none, receive full registries
             c.send(7, lab.varint(0))
-        elif pid == 0:  # cookie request: echo the key and data as a cookie response
-            c.send(1, data)
+        elif pid == 0:  # cookie request: this client has no stored cookie payload
+            c.send(1, data + b'\x00')  # preserve the key, then encode an absent payload
         elif pid == 4:  # keep alive
             c.send(4, data)
         elif pid == 5:  # ping

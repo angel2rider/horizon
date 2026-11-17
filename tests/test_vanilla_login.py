@@ -64,12 +64,13 @@ class VanillaLoginTests(unittest.TestCase):
         self.assertEqual(fake.sock.timeouts, [1.0])
         self.assertTrue(fake.sock.closed)
 
-    def test_cookie_request_is_answered(self):
-        cookie = b'\x03key\x05value'
+    def test_cookie_request_is_answered_with_an_absent_payload(self):
+        # A request has only an identifier; a response also needs the optional-payload flag.
+        cookie = b'\x0fminecraft:probe'
         fake = FakeConnection((3, lab.varint(16)), (2, b''),
                               (15, b''), (0, cookie), (3, b''))
         self.join_with(fake)
-        self.assertIn((1, cookie), fake.sent)
+        self.assertIn((1, b'\x0fminecraft:probe\x00'), fake.sent)
 
     def test_resource_pack_push_raises_a_clear_error(self):
         fake = FakeConnection((3, lab.varint(16)), (2, b''),
