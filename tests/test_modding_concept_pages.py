@@ -133,17 +133,18 @@ class ConceptPages(unittest.TestCase):
         text = "```markdown\n[example](missing.md)\n```\n\nInline `[x](gone.md)` code.\n"
         pages.validate(text, "concepts/parts/a-item.md", self.src, {})
 
-    def test_heading_slugs_are_ascii_folded_like_mdbook(self):
-        text = "# Café guide\n\n## Rüstung\n\n# Plain heading\n"
+    def test_heading_slugs_keep_unicode_letters_like_mdbook(self):
+        text = "# Café guide\n\n## Rüstung\n\n# Straße\n\n# 東京\n\n# Plain heading\n"
         found = list(pages.headings(text))
         self.assertEqual(found, [
-            ("Café guide", "cafe-guide"),
-            ("Rüstung", "rustung"),
+            ("Café guide", "café-guide"),
+            ("Rüstung", "rüstung"),
+            ("Straße", "straße"),
+            ("東京", "東京"),
             ("Plain heading", "plain-heading"),
         ])
-        self.assertTrue(all(slug.isascii() for _, slug in found))
 
-    def test_explicit_heading_ids_are_untouched_by_ascii_folding(self):
+    def test_explicit_heading_ids_are_untouched(self):
         self.assertEqual(list(pages.headings("# Café guide {#custom-id}\n")),
                          [("Café guide", "custom-id")])
 
@@ -152,13 +153,13 @@ class ConceptPages(unittest.TestCase):
         self.assertEqual([slug for _, slug in pages.headings(text)],
                          ["hello-world", "foo_bar-baz-42", "duplicate", "duplicate-1"])
 
-    def test_nonascii_fragment_links_are_rejected_but_folded_ones_accepted(self):
+    def test_unicode_fragment_links_are_accepted_but_folded_ones_rejected(self):
         (self.src / "concepts/parts/b-block.md").write_text("# Café guide\n")
         link = "concepts/parts/a-item.md"
-        pages.validate("[x](b-block.md#cafe-guide)", link, self.src, {})
         for fragment in ("café-guide", "caf%C3%A9-guide"):
-            with self.assertRaisesRegex(AssertionError, "missing anchor"):
-                pages.validate(f"[x](b-block.md#{fragment})", link, self.src, {})
+            pages.validate(f"[x](b-block.md#{fragment})", link, self.src, {})
+        with self.assertRaisesRegex(AssertionError, "missing anchor"):
+            pages.validate("[x](b-block.md#cafe-guide)", link, self.src, {})
 
     def test_explicit_heading_ids_are_anchors(self):
         (self.src / "concepts/parts/b-block.md").write_text("# Block parts\n\n## Landing {#custom}\n")
