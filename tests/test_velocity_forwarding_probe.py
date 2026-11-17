@@ -38,5 +38,16 @@ class NoProtocolLiteralTests(unittest.TestCase):
         self.assertNotRegex(declaration, r"default=\d")
 
 
+class VarintTests(unittest.TestCase):
+    """VarInts are signed 32-bit ints: parse_varint must match Java/net_capture, not decode unsigned."""
+
+    def test_negative_varints_decode_as_signed(self):
+        for n in (-1, -2147483648, 0, 2147483647):
+            with self.subTest(n=n):
+                self.assertEqual(probe.parse_varint(probe.varint(n))[0], n)
+        # The canonical -1 encoding must not come back as 4294967295.
+        self.assertEqual(probe.parse_varint(bytes.fromhex("ffffffff0f"))[0], -1)
+
+
 if __name__ == "__main__":
     unittest.main()
