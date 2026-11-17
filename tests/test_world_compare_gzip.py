@@ -62,6 +62,7 @@ def region(entries):
     for index, ((lx, lz), (codec, body)) in enumerate(sorted(entries.items())):
         at = (lx + lz * 32) * 4
         header[at:at + 3] = (2 + index).to_bytes(3, "big")
+        header[at + 3] = 1
         payload = stored(codec, body)
         blocks += struct.pack(">I", len(payload) + 1) + bytes([codec]) + payload
         blocks += b"\x00" * ((-len(blocks)) % 4096)
