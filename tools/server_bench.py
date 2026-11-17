@@ -306,7 +306,8 @@ def pumpkin_config(text, port, args):
         if re.search(pattern, body):
             return re.sub(pattern, line, body)
         stripped = body.rstrip('\n')
-        return stripped + ('\n' if stripped else '') + line + body[len(stripped):]
+        trailing = body[len(stripped):] or '\n'
+        return stripped + ('\n' if stripped else '') + line + trailing
     head, _, _ = text.partition('\n[')
     rest = text[len(head):]
     for key, value in top.items():

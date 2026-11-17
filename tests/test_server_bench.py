@@ -5,6 +5,7 @@ import re
 import json
 import subprocess
 import tempfile
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -153,6 +154,14 @@ address = "0.0.0.0:25565"
         self.assertIn('[telemetry]\nenabled = false\nendpoint = ""', text)
         self.assertIn('[plugins]\nenabled = false', text)
         self.assertIn('[networking.java.authentication]\nenabled = false', text)
+
+    def test_empty_sections_keep_the_next_header_on_its_own_line(self):
+        minimal = 'seed = "0"\n\n[networking.java]\n[telemetry]\n'
+        config = tomllib.loads(pumpkin_config(minimal, 25599, SimpleNamespace(seed=12345)))
+        self.assertEqual(config['seed'], '12345')
+        self.assertEqual(config['networking']['java']['address'], '127.0.0.1:25599')
+        self.assertEqual(config['networking']['java']['simulation_distance'], 10)
+        self.assertEqual(config['telemetry'], {'enabled': False, 'endpoint': ''})
 
 
 class FakeServer:
