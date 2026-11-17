@@ -1,4 +1,5 @@
 import subprocess
+import tempfile
 from pathlib import Path
 import sys
 import unittest
@@ -16,6 +17,23 @@ LOCK = {"minecraft": {"version": "26.3", "manifest_sha1": "m3", "accepted_manife
 def manifest(version, client, server, java=25):
     return {"id": version, "downloads": {"client": {"sha1": client}, "server": {"sha1": server}},
             "javaVersion": {"majorVersion": java}}
+
+
+class StatusTests(unittest.TestCase):
+    def test_a_newly_generated_untracked_output_is_regenerated(self):
+        with tempfile.TemporaryDirectory(dir='/tmp/opencode', prefix='port-regen-') as folder:
+            root = Path(folder)
+            for args in (('init', '-q'), ('config', 'user.email', 'test@example.invalid'),
+                         ('config', 'user.name', 'test')):
+                subprocess.run(['git', *args], cwd=root, check=True, capture_output=True)
+            (root / 'gen').mkdir()
+            (root / 'gen/existing.rs').write_text('// old\n')
+            (root / 'gen/new.rs').write_text('// one\n// two\n')
+            subprocess.run(['git', 'add', 'gen/existing.rs'], cwd=root, check=True, capture_output=True)
+            subprocess.run(['git', 'commit', '-qm', 'base'], cwd=root, check=True, capture_output=True)
+            state, stat = regen.status(root, ['gen/existing.rs', 'gen/new.rs'])
+        self.assertEqual(state, 'regenerated')
+        self.assertEqual(stat, {'gen/new.rs': [2, 0]})
 
 
 class PinTests(unittest.TestCase):
