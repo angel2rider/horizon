@@ -60,10 +60,11 @@ class InputIntegrity(unittest.TestCase):
             {'name': 'server.tick.mobs_128', 'operations': 2000, 'checksum': 'b' * 16, 'wall_ns': 2_000_000.0},
         ] * 2
         sequence = iter(samples)
-        args = SimpleNamespace(game='client', resources='resources', valgrind='no-valgrind-here', work='/tmp/opencode',
+        args = SimpleNamespace(game='client', resources='resources', valgrind='no-valgrind-here', work=None,
                                wall_samples=3, count_samples=0, commit='c' * 40, run='1', host='host', only=None,
                                out=None)
-        with tempfile.TemporaryDirectory(dir='/tmp/opencode', prefix='hot-provenance-') as folder:
+        with tempfile.TemporaryDirectory(prefix='hot-provenance-') as folder:
+            args.work = folder
             args.out = str(Path(folder) / 'result.json')
             with mock.patch.object(hot_paths, 'install', side_effect=lambda game, work: game), \
                     mock.patch.object(hot_paths, 'run_game',
