@@ -61,25 +61,58 @@ def metadata(manifest):
     return json.loads(out)["packages"]
 
 
+def local_packages(packages):
+    """The package names cargo metadata reported for this workspace (with --no-deps, its members)."""
+    return {package["name"] for package in packages}
+
+
+def resolve_local(dep, known):
+    """(is_local, name): whether `dep` reaches a local package and the package name to record.
+
+    A dependency is local when metadata gives it a `path`, or when it resolves to one of the workspace
+    packages. The latter covers a registry declaration (`version = "..."`) that Cargo redirected to a
+    workspace crate with `[patch.crates-io]`: `cargo metadata --no-deps` reports such a dependency
+    without a `path`, so matching its name (or the package it renames to) against the package list is
+    what keeps a layer crossing from slipping past the gate. `name` is the real package name for the
+    patched case and the declared name for an ordinary path dependency (the existing behaviour).
+    """
+    name = dep.get("package") or dep["name"]
+    if dep.get("path"):
+        return True, dep["name"]
+    return name in known, name
+
+
 def edges(packages):
-    """{crate: {dependency, ...}} for normal and build dependencies on other local crates (path dependencies)."""
+    """{crate: {dependency, ...}} for normal and build dependencies on other local crates.
+
+    Includes a registry declaration resolved to a workspace crate by `[patch.crates-io]`, even though
+    --no-deps reports it without a `path`.
+    """
+    known = local_packages(packages)
     graph = {}
     for package in packages:
         deps = graph.setdefault(package["name"], set())
         for dep in package["dependencies"]:
-            if dep.get("path") and dep.get("kind") != "dev":
-                deps.add(dep["name"])
+            if dep.get("kind") == "dev":
+                continue
+            local, name = resolve_local(dep, known)
+            if local:
+                deps.add(name)
     return graph
 
 
 def optional_edges(packages):
-    """The path dependencies, as 'crate -> dependency', that are optional everywhere they are declared (normal and
+    """The local dependencies, as 'crate -> dependency', that are optional everywhere they are declared (normal and
     build, every target): one mandatory declaration makes the edge mandatory."""
+    known = local_packages(packages)
     declared, mandatory = set(), set()
     for package in packages:
         for dep in package["dependencies"]:
-            if dep.get("path") and dep.get("kind") != "dev":
-                edge = f"{package['name']} -> {dep['name']}"
+            if dep.get("kind") == "dev":
+                continue
+            local, name = resolve_local(dep, known)
+            if local:
+                edge = f"{package['name']} -> {name}"
                 declared.add(edge)
                 if not dep.get("optional"):
                     mandatory.add(edge)
@@ -163,11 +196,12 @@ def check(config, graph, base=None, optional=frozenset(), upstream=None):
 
 
 def portable(config, packages):
-    """Problems of the portable crates (docs/layers.md#engine): a path dependency on a crate that isn't portable,
-    or a normal or build dependency on a library they never take (window, GPU, sound, gamepad, clipboard, HTTP)."""
+    """Problems of the portable crates (docs/layers.md#engine): a local dependency on a crate that isn't portable,
+    or a dependency on an external library they never take (window, GPU, sound, gamepad, clipboard, HTTP)."""
     spec = config.get("portable", {})
     crates, forbidden = set(spec.get("crates", [])), set(spec.get("forbidden", []))
     optional_baselines = optional_rows(config)
+    known = local_packages(packages)
     problems = {f"{crate}: listed as portable in {CONFIG_PATH}, but not an engine crate there"
                 for crate in crates if config["crates"].get(crate) != "engine"}
     for package in packages:
@@ -176,13 +210,14 @@ def portable(config, packages):
         for dep in package["dependencies"]:
             if dep.get("kind") == "dev":
                 continue
-            edge = f"{package['name']} -> {dep['name']}"
+            local, name = resolve_local(dep, known)
+            edge = f"{package['name']} -> {name}"
             if dep.get("optional") and edge in optional_baselines:
                 continue
-            if dep.get("path") and dep["name"] not in crates:
+            if local and name not in crates:
                 problems.add(f"{edge}: a portable crate depends only on the other portable crates "
                              f"({DOC}{SECTION['engine']})")
-            elif not dep.get("path") and dep["name"] in forbidden:
+            elif not local and name in forbidden:
                 problems.add(f"{edge}: a portable crate takes no window, GPU, sound, gamepad, clipboard or HTTP "
                              f"library ({DOC}{SECTION['engine']})")
     return sorted(problems)

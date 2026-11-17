@@ -199,6 +199,46 @@ class CheckLayersTests(unittest.TestCase):
         pkg = {"name": "game", "dependencies": [{"name": "cosmetics", "kind": None, "path": None}]}
         self.assertEqual(check_layers.edges([pkg]), {"game": set()})
 
+    def test_a_patched_registry_dep_is_an_edge_like_a_path_dep(self):
+        """A `[patch.crates-io]` declaration is a registry version in --no-deps metadata (no `path`), but Cargo
+        resolves it to a workspace crate: the layer gate must see the crossing exactly as for a path dep."""
+        def packages(extra):
+            return [{"name": "game", "dependencies": [dict(extra, name="cosmetics", kind=None)]},
+                    {"name": "cosmetics", "dependencies": []}]
+
+        declarations = {
+            "registry": {},                    # patched to the local crate; --no-deps reports no `path`
+            "path": {"path": "/x/cosmetics"},  # ordinary local path dependency (control)
+        }
+        for declared, extra in declarations.items():
+            with self.subTest(declaration=declared):
+                graph = check_layers.edges(packages(extra))
+                self.assertEqual(graph, {"game": {"cosmetics"}, "cosmetics": set()})
+                problems, _ = check_layers.check(CONFIG, graph)
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn("game -> cosmetics: engine may not depend on horizon", problems[0])
+
+    def test_a_renamed_registry_dep_resolves_to_its_package(self):
+        packages = [{"name": "game", "dependencies": [
+            {"name": "renamed", "package": "cosmetics", "kind": None}]},
+            {"name": "cosmetics", "dependencies": []}]
+        self.assertEqual(check_layers.edges(packages), {"game": {"cosmetics"}, "cosmetics": set()})
+
+    def test_optional_edges_resolve_a_patched_registry_dep_to_the_local_crate(self):
+        packages = [{"name": "game", "dependencies": [{"name": "cosmetics", "kind": None, "optional": True}]},
+                    {"name": "cosmetics", "dependencies": []}]
+        self.assertEqual(check_layers.optional_edges(packages), {"game -> cosmetics"})
+        packages[0]["dependencies"][0]["optional"] = False
+        self.assertEqual(check_layers.optional_edges(packages), set())
+
+    def test_portable_treats_a_patched_registry_dep_as_a_local_crate(self):
+        config = dict(CONFIG, portable={"crates": ["core"], "forbidden": []})
+        packages = [{"name": "core", "dependencies": [{"name": "game", "kind": None}]},
+                    {"name": "game", "dependencies": []}]
+        problems = check_layers.portable(config, packages)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("core -> game: a portable crate depends only on the other portable crates", problems[0])
+
 
 class UpstreamLayerRestorationTests(unittest.TestCase):
     def setUp(self):
