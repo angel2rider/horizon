@@ -16,9 +16,12 @@ class ChangedFilesCliTests(unittest.TestCase):
         """SubTest: missing file and directory paths give exit 2, no traceback."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            invalid = root / "invalid.txt"
+            invalid.write_bytes(b"\xff")
             test_cases = [
                 ("missing", root / "missing.txt"),
                 ("directory", root),
+                ("invalid UTF-8", invalid),
             ]
             for name, path in test_cases:
                 with self.subTest(name=name):

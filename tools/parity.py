@@ -1682,7 +1682,7 @@ def main():
         if args.changed_files:
             try:
                 text = Path(args.changed_files).read_text(encoding="utf-8")
-            except OSError as error:
+            except (OSError, UnicodeDecodeError) as error:
                 parser.error(f"cannot read changed-files path {args.changed_files}: {error}")
             changed, since = set(text.split("\n")) - {""}, ""
         else:
