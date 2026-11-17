@@ -9,9 +9,11 @@ import re
 TOKEN = re.compile(r"//|/\*|(?<![\w])[bc]?r(#*)\"|\"|'")
 COMMENT_EDGE = re.compile(r"/\*|\*/")
 STRING_REST = re.compile(r'(?:[^"\\]|\\.)*"', re.S)
-# `#[cfg(test)]`, `#[cfg(any(test, ...))]`, `#[test]`; not `#[cfg(not(test))]`.
-TEST_ATTR = re.compile(r"#\[\s*(?:test\s*\]|cfg\s*\(\s*(?:test\s*\)|any\s*\([^\]]*?\btest\b))")
-NOT_TEST = re.compile(r"\bnot\s*\(\s*test\s*\)")
+# Any attribute that can gate an item on the `test` cfg: `#[test]` or `#[cfg(...)]`. The predicate itself is
+# parsed by `_is_test_attr`, so `all(...)`, `any(...)` and nested combinations are handled alike. `cfg_attr` is
+# deliberately not a candidate: it adds attributes under `test` without gating the item, so treating its items as
+# test-only would hide production edges from the layer gate.
+TEST_ATTR = re.compile(r"#\[\s*(?:test\s*\]|cfg\s*\()")
 USE = re.compile(r"(?<![\w])(pub(?:\s*\([^)]*\))?\s+)?use\s+([^;]+);")
 MOD_DECL = re.compile(r"(?<![\w])(?:pub(?:\s*\([^)]*\))?\s+)?mod\s+(\w+)\s*;")
 INCLUDE = re.compile(r'include!\(\s*"([^"]+)"\s*\)')
@@ -107,12 +109,47 @@ def attr_end(code, pos):
     return len(code)
 
 
+def _has_positive_test(text):
+    """Whether blanked cfg text has a `test` predicate outside every `not(...)` group."""
+    negated = []  # one entry per open paren: True when it is a `not(...)` group
+    word, i, end = "", 0, len(text)
+    while i < end:
+        c = text[i]
+        if c.isalnum() or c == "_":
+            j = i + 1
+            while j < end and (text[j].isalnum() or text[j] == "_"):
+                j += 1
+            word = text[i:j]
+            if word == "test" and not any(negated):
+                return True
+            i = j
+        elif c == "(":
+            negated.append(word == "not")
+            word, i = "", i + 1
+        elif c == ")":
+            if negated:
+                negated.pop()
+            word, i = "", i + 1
+        elif c.isspace():
+            i += 1  # keep `word` so `not ( test )` is recognised
+        else:
+            word, i = "", i + 1
+    return False
+
+
+def _is_test_attr(text):
+    """Whether a `#[...]` attribute gates the item on the `test` cfg."""
+    if re.match(r"#\[\s*test\s*\]", text):
+        return True
+    return bool(re.match(r"#\[\s*cfg\s*\(", text) and _has_positive_test(blank(text)))
+
+
 def test_regions(code):
     """[(start, end)] of the items under a test attribute, and the names of `mod x;` declared under one."""
     regions, test_mods = [], []
     for attr in TEST_ATTR.finditer(code):
         stop = attr_end(code, attr.start())
-        if NOT_TEST.search(code, attr.start(), stop):
+        if not _is_test_attr(code[attr.start():stop]):
             continue
         end, braced = item_end(code, stop)
         if not braced and (decl := MOD_DECL.search(code, stop, end)):
