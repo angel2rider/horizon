@@ -127,6 +127,7 @@ fn step(game: &mut Game<'_>) {
 }
 
 #[test]
+#[ignore = "daily"]
 fn a_selector_matching_two_entities_mounts_nothing() {
     with_game(|game| {
         summon(game, "minecraft:pig", 4.5, [24730, 0, 0, 1], false);
@@ -166,6 +167,7 @@ fn a_selector_matching_two_entities_mounts_nothing() {
 }
 
 #[test]
+#[ignore = "daily"]
 fn a_mounting_mob_drops_its_lead() {
     with_game(|game| {
         summon(game, "minecraft:pig", 6.5, [24730, 0, 0, 1], true);
@@ -196,6 +198,7 @@ fn a_mounting_mob_drops_its_lead() {
 }
 
 #[test]
+#[ignore = "daily"]
 fn a_brain_boarding_mob_drops_its_lead() {
     with_game(|game| {
         // A hoglin is a monster: Peaceful refuses to summon it.
