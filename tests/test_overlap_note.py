@@ -1,8 +1,10 @@
+import json
 import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tools.ci import overlap_note as ov
 
@@ -75,6 +77,37 @@ class FunctionTests(unittest.TestCase):
 
     def test_empty(self):
         self.assertEqual(ov.functions(""), set())
+
+
+class OneNoteTests(unittest.TestCase):
+    def test_two_racing_notes_become_one(self):
+        calls = []
+
+        def fake_gh(*arguments, **options):
+            calls.append(arguments)
+            url = next((value for value in arguments if value.startswith("repos/")), "")
+            return "11\n12\n" if "/comments?" in url else ""
+
+        with mock.patch.object(ov, "gh", fake_gh):
+            api = ov.Api("o/r")
+            existing = api.own_note(5)
+            api.write(5, existing, "edited")
+        self.assertEqual(existing, [11, 12])
+        patched = [call for call in calls if "PATCH" in call]
+        deleted = [call for call in calls if "DELETE" in call]
+        self.assertEqual(len(patched), 1)
+        self.assertTrue(any(value.endswith("/issues/comments/11") for value in patched[0]))
+        self.assertEqual(len(deleted), 1)
+        self.assertTrue(deleted[0][-1].endswith("/issues/comments/12"))
+
+    def test_no_note_creates_one(self):
+        calls = []
+        with mock.patch.object(ov, "gh", lambda *arguments, **options: calls.append(arguments) or ""):
+            api = ov.Api("o/r")
+            self.assertEqual(api.own_note(5), [])
+            api.write(5, [], "new")
+        self.assertEqual(len(calls), 2)
+        self.assertIn("-f", calls[1])
 
 
 class OverlapTests(unittest.TestCase):
