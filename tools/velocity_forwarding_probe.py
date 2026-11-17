@@ -58,9 +58,13 @@ def parse_varint(buf, i=0):
         b = buf[i]
         i += 1
         n |= (b & 0x7F) << shift
-        if not b & 0x80:
-            return n, i
         shift += 7
+        if not b & 0x80:
+            if n & 0x80000000:  # Minecraft VarInts are signed 32-bit ints (as in net_capture.read_varint)
+                n -= 1 << 32
+            return n, i
+        if shift > 35:  # a VarInt is at most 5 bytes
+            raise ValueError("varint too long")
 
 
 def string(s):
