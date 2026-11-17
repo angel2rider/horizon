@@ -5,6 +5,7 @@ The harnesses append a default scratch directory when the caller named none.
 last `--work-dir` wins, so an extra pair appended after `--work-dir=/tmp/x`
 would send the run somewhere the caller did not ask for.
 """
+import argparse
 import contextlib
 import importlib.util
 import io
@@ -52,6 +53,26 @@ class EnsureWorkDirTest(unittest.TestCase):
     def test_the_last_one_wins_as_in_argparse(self):
         argv = ['harness.py', '--work-dir', '/tmp/first', '--work-dir=/tmp/second']
         self.assertEqual(harness_args.ensure_work_dir(DEFAULT, argv), Path('/tmp/second'))
+
+    def test_a_separator_stops_option_parsing_as_in_argparse(self):
+        # argparse treats tokens after a bare '--' as positional, so one that
+        # looks like --work-dir cannot name the directory.
+        argv = ['prog', '--', '--work-dir', '/tmp/positional']
+        parser = argparse.ArgumentParser(prog='prog')
+        parser.add_argument('--work-dir')
+        known, unknown = parser.parse_known_args(argv[1:])
+        self.assertIsNone(known.work_dir)
+        # The look-alike option and its value stay unrecognized (positional).
+        self.assertIn('--work-dir', unknown)
+        self.assertIn('/tmp/positional', unknown)
+
+        self.assertIsNone(harness_args.named_work_dir(argv))
+        self.assertEqual(harness_args.ensure_work_dir(DEFAULT, argv.copy()), DEFAULT)
+
+    def test_a_work_dir_before_the_separator_is_kept(self):
+        argv = ['prog', '--work-dir', '/tmp/named', '--', 'positional']
+        self.assertEqual(harness_args.named_work_dir(argv), '/tmp/named')
+        self.assertEqual(harness_args.ensure_work_dir(DEFAULT, argv.copy()), Path('/tmp/named'))
 
 
 class FreshCaptureHarnessTest(unittest.TestCase):

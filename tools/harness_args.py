@@ -22,6 +22,10 @@ def named_work_dir(argv) -> str | None:
     one given wins, like argparse's."""
     chosen = None
     for index, argument in enumerate(argv[1:], start=1):
+        if argument == '--':
+            # argparse stops treating tokens as options at a bare '--'; everything
+            # after it is positional and cannot name --work-dir.
+            break
         if argument == '--work-dir' and index + 1 < len(argv):
             chosen = argv[index + 1]
         elif argument.startswith('--work-dir='):
