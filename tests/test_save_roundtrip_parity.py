@@ -85,7 +85,7 @@ class SaveRoundtripDatFileSetTests(unittest.TestCase):
     """compare_worlds() must enumerate .dat files from both worlds, not just vanilla's."""
 
     def make_worlds(self, vanilla_files, horizon_files):
-        tmp = tempfile.TemporaryDirectory(prefix='u08-', dir='/tmp/opencode')
+        tmp = tempfile.TemporaryDirectory(prefix='save-roundtrip-')
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
         worlds = []
