@@ -108,7 +108,11 @@ def rowless_problems(rows, functions):
     named = {(row.package, row.test.rsplit("::", 1)[-1]) for row in rows}
     problems = []
     for path, line, name, packages, kind, _ in functions:
-        if any(ignored_tests.shard_runs(package, "lib" if kind == "lib" else f"{kind}:") for package in packages):
+        # A shard builds `--lib --bins --tests` only. It never builds an example or a bench, so an
+        # ignored test there runs nowhere even in an integration-test package. `shard_runs` answers
+        # for any non-lib target of such a package; passing `example:`/`bench:` would wrongly excuse it.
+        if kind in ("lib", "bin", "test") and any(
+                ignored_tests.shard_runs(package, "lib" if kind == "lib" else f"{kind}:") for package in packages):
             continue
         if not any((package, name) in named for package in packages):
             problems.append(f"{path}:{line}: `{name}` is #[ignore]d in {' or '.join(sorted(packages))}, which no daily "
