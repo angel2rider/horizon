@@ -101,6 +101,9 @@ def join(host, port, name, seconds):
             break
         elif pid == 2:
             raise RuntimeError(f'disconnected during configuration: {data!r}')
+        elif pid == 20:  # code of conduct: the server waits for packet 9 acceptance
+            raise RuntimeError(
+                'unhandled configuration packet 20 (code_of_conduct): cannot accept server terms')
         elif pid in (8, 9):  # resource pack pop/push
             # Answering a push needs a pack UUID and an acceptance code; this
             # bare client cannot make one up, so fail instead of hanging.

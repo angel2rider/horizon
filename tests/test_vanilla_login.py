@@ -78,6 +78,15 @@ class VanillaLoginTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'resource_pack_push'):
             self.join_with(fake)
 
+    def test_code_of_conduct_raises_instead_of_waiting_for_configuration(self):
+        # The server waits for packet 9 acceptance after sending packet 20.
+        # This bare client must not silently wait or accept unseen terms.
+        fake = FakeConnection((3, lab.varint(16)), (2, b''),
+                              (15, b''), (20, b'server terms'), (3, b''))
+        with self.assertRaisesRegex(RuntimeError, 'unhandled configuration packet 20.*code_of_conduct'):
+            self.join_with(fake)
+        self.assertNotIn((9, b''), fake.sent)
+
     def test_non_brand_custom_payload_raises_a_clear_error(self):
         channel = b'mod:query'
         data = lab.varint(len(channel)) + channel + b'\x00'
