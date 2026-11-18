@@ -37,6 +37,33 @@ def run(*packages, allowed=(), base=None, crates=None):
     return check_layers.check(config, check_layers.edges(packages), base)
 
 
+def cargo_packages(source="game", target="cosmetics", *, path=False, rename=None, optional=False):
+    """Actual offline Cargo metadata, including the real rename field and resolved package IDs."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "Cargo.toml").write_text(
+            f'[workspace]\nresolver = "3"\nmembers = ["{source}", "{target}"]\n'
+            f'[patch.crates-io]\n{target} = {{ path = "{target}" }}\n')
+        for name in (source, target):
+            (root / name / "src").mkdir(parents=True)
+            (root / name / "src/lib.rs").write_text("")
+            (root / name / "Cargo.toml").write_text(
+                f'[package]\nname = "{name}"\nversion = "1.0.0"\nedition = "2024"\n')
+        location = f'path = "../{target}"' if path else 'version = "=1.0.0"'
+        alias = rename or target
+        declaration = f'{alias} = {{ package = "{target}", {location}, optional = {str(optional).lower()} }}\n'
+        with (root / source / "Cargo.toml").open("a") as f:
+            f.write(f'[dependencies]\n{declaration}')
+        subprocess.run(["cargo", "generate-lockfile", "--offline"], cwd=root, check=True,
+                       capture_output=True, text=True)
+        lock = (root / "Cargo.lock").read_bytes()
+        with mock.patch.object(check_layers, "ROOT", root):
+            packages = check_layers.metadata(root / "Cargo.toml")
+        if (root / "Cargo.lock").read_bytes() != lock:
+            raise AssertionError("the layer check changed Cargo.lock")
+        return packages
+
+
 class CheckLayersTests(unittest.TestCase):
     def test_downward_and_same_layer_dependencies_pass(self):
         problems, notes = run(package("mod-api", "core"), package("launcher", "mod-api", "cosmetics"))
@@ -195,6 +222,45 @@ class CheckLayersTests(unittest.TestCase):
         for workspace in config["workspaces"]:
             self.assertTrue((check_layers.ROOT / workspace).is_file(), workspace)
 
+    def test_a_pending_crate_may_use_only_the_crates_its_entry_lists(self):
+        config = dict(CONFIG, portable={"crates": ["core"], "pending": {"game": ["mod-api"]}, "forbidden": ["wgpu"]})
+        listed = package("game", "core", "mod-api")
+        self.assertEqual(check_layers.portable(config, [listed]), [])
+        unlisted = package("game", "core", "mod-api", "cosmetics")
+        wgpu = {"name": "wgpu", "kind": None, "path": None}
+        problems = check_layers.portable(config, [dict(unlisted, dependencies=unlisted["dependencies"] + [wgpu])])
+        self.assertEqual(len(problems), 2, problems)
+        self.assertIn("game -> cosmetics: a portable crate depends only on the other portable crates", problems[0])
+        self.assertIn("game -> wgpu: a portable crate takes no window, GPU", problems[1])
+
+    def test_a_crate_is_pending_or_portable_never_both(self):
+        config = dict(CONFIG, portable={"crates": ["core", "game"], "pending": {"game": []}, "forbidden": []})
+        self.assertEqual(check_layers.portable(config, []), [
+            f"game: in both portable.crates and portable.pending of {check_layers.CONFIG_PATH}",
+        ])
+
+    def test_pending_entries_only_shrink(self):
+        def config(*deps):
+            return dict(CONFIG, portable={"crates": ["core"], "pending": {"game": list(deps)}, "forbidden": []})
+        base = config("mod-api")
+        self.assertEqual(check_layers.portable(config("mod-api"), [], base), [])
+        self.assertEqual(check_layers.portable(config(), [], base), [])
+        problems = check_layers.portable(config("mod-api", "cosmetics"), [], base)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("game -> cosmetics: added to portable.pending", problems[0])
+
+    def test_a_portable_crate_does_not_become_pending(self):
+        base = dict(CONFIG, portable={"crates": ["core", "game"], "forbidden": []})
+        config = dict(CONFIG, portable={"crates": ["core"], "pending": {"game": ["mod-api"]}, "forbidden": []})
+        problems = check_layers.portable(config, [], base)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("game: portable on the base", problems[0])
+
+    def test_a_crate_new_to_pending_may_take_its_first_entry(self):
+        base = dict(CONFIG, portable={"crates": ["core"], "forbidden": []})
+        config = dict(CONFIG, portable={"crates": ["core"], "pending": {"game": ["mod-api"]}, "forbidden": []})
+        self.assertEqual(check_layers.portable(config, [], base), [])
+
     def test_registry_dependencies_are_not_edges(self):
         pkg = {"name": "game", "dependencies": [{"name": "cosmetics", "kind": None, "path": None}]}
         self.assertEqual(check_layers.edges([pkg]), {"game": set()})
@@ -202,42 +268,51 @@ class CheckLayersTests(unittest.TestCase):
     def test_a_patched_registry_dep_is_an_edge_like_a_path_dep(self):
         """A `[patch.crates-io]` declaration is a registry version in --no-deps metadata (no `path`), but Cargo
         resolves it to a workspace crate: the layer gate must see the crossing exactly as for a path dep."""
-        def packages(extra):
-            return [{"name": "game", "dependencies": [dict(extra, name="cosmetics", kind=None)]},
-                    {"name": "cosmetics", "dependencies": []}]
-
-        declarations = {
-            "registry": {},                    # patched to the local crate; --no-deps reports no `path`
-            "path": {"path": "/x/cosmetics"},  # ordinary local path dependency (control)
-        }
-        for declared, extra in declarations.items():
-            with self.subTest(declaration=declared):
-                graph = check_layers.edges(packages(extra))
+        for path in (False, True):
+            with self.subTest(path=path):
+                graph = check_layers.edges(cargo_packages(path=path))
                 self.assertEqual(graph, {"game": {"cosmetics"}, "cosmetics": set()})
                 problems, _ = check_layers.check(CONFIG, graph)
                 self.assertEqual(len(problems), 1, problems)
                 self.assertIn("game -> cosmetics: engine may not depend on horizon", problems[0])
 
     def test_a_renamed_registry_dep_resolves_to_its_package(self):
-        packages = [{"name": "game", "dependencies": [
-            {"name": "renamed", "package": "cosmetics", "kind": None}]},
-            {"name": "cosmetics", "dependencies": []}]
+        packages = cargo_packages(rename="renamed-dep")
+        dep = next(p for p in packages if p["name"] == "game")["dependencies"][0]
+        self.assertEqual((dep["name"], dep["rename"]), ("cosmetics", "renamed-dep"))
         self.assertEqual(check_layers.edges(packages), {"game": {"cosmetics"}, "cosmetics": set()})
 
     def test_optional_edges_resolve_a_patched_registry_dep_to_the_local_crate(self):
-        packages = [{"name": "game", "dependencies": [{"name": "cosmetics", "kind": None, "optional": True}]},
-                    {"name": "cosmetics", "dependencies": []}]
+        packages = cargo_packages(optional=True)
         self.assertEqual(check_layers.optional_edges(packages), {"game -> cosmetics"})
-        packages[0]["dependencies"][0]["optional"] = False
+        next(p for p in packages if p["name"] == "game")["dependencies"][0]["optional"] = False
         self.assertEqual(check_layers.optional_edges(packages), set())
 
     def test_portable_treats_a_patched_registry_dep_as_a_local_crate(self):
         config = dict(CONFIG, portable={"crates": ["core"], "forbidden": []})
-        packages = [{"name": "core", "dependencies": [{"name": "game", "kind": None}]},
-                    {"name": "game", "dependencies": []}]
+        packages = cargo_packages("core", "game")
         problems = check_layers.portable(config, packages)
         self.assertEqual(len(problems), 1, problems)
         self.assertIn("core -> game: a portable crate depends only on the other portable crates", problems[0])
+
+    def test_a_same_name_external_package_is_not_a_local_edge(self):
+        local = "path+file:///x/cosmetics#1.0.0"
+        external = "registry+https://github.com/rust-lang/crates.io-index#cosmetics@2.0.0"
+        game = "path+file:///x/game#1.0.0"
+        dep = {"name": "cosmetics", "rename": "look", "kind": None, "target": None, "path": None,
+               "optional": True, "req": "^2.0"}
+        packages = [{"name": "game", "id": game, "dependencies": [dep]},
+                    {"name": "cosmetics", "id": local, "dependencies": []}]
+        resolved = {"packages": [
+            {"id": local, "source": None, "manifest_path": "/x/cosmetics/Cargo.toml"},
+            {"id": external, "source": "registry+https://github.com/rust-lang/crates.io-index"}],
+            "resolve": {"nodes": [{"id": game, "deps": [{"name": "look", "pkg": external,
+                                                       "dep_kinds": [{"kind": None, "target": None}]}]}]}}
+        check_layers.resolve_registry([(packages[0], dep)], resolved)
+        self.assertEqual(check_layers.edges(packages), {"game": set(), "cosmetics": set()})
+        self.assertEqual(check_layers.optional_edges(packages), set())
+        config = dict(CONFIG, portable={"crates": ["game"], "forbidden": ["cosmetics"]})
+        self.assertEqual(len(check_layers.portable(config, packages)), 1)
 
 
 class UpstreamLayerRestorationTests(unittest.TestCase):
