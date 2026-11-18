@@ -54,6 +54,12 @@ class VarintTests(unittest.TestCase):
         # The canonical -1 encoding must not come back as 4294967295.
         self.assertEqual(probe.parse_varint(bytes.fromhex("ffffffff0f"))[0], -1)
 
+    def test_excess_fifth_group_bits_wrap_to_signed_32_bits(self):
+        for raw, expected in (("ffffffff1f", -1), ("8080808010", 0),
+                              ("8080808018", -2147483648)):
+            with self.subTest(raw=raw):
+                self.assertEqual(probe.parse_varint(bytes.fromhex(raw)), (expected, 5))
+
 
 if __name__ == "__main__":
     unittest.main()

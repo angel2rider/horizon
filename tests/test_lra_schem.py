@@ -82,6 +82,12 @@ class SpongeSchematicTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'overlong varint'):
             lra_schem._varints(bytes([0xFF, 0xFF, 0xFF, 0xFF, 0x7F]), 1)
 
+    def test_varints_rejects_unfinished_trailing_encoding(self):
+        for raw in (b'\x00\x80', b'\x00' + b'\x80' * 5):
+            with self.subTest(raw=raw.hex()):
+                with self.assertRaises(ValueError):
+                    lra_schem._varints(raw, 1)
+
     def test_varints_keeps_valid_indices_identical(self):
         self.assertEqual(lra_schem._varints(bytes([0x01]), 1), [1])
         # Max u32 still fits in five bytes and must decode unchanged.

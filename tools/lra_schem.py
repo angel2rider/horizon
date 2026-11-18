@@ -67,7 +67,7 @@ def _varints(raw, count):
     out, value, shift, used = [], 0, 0, 0
     for byte in raw:
         used += 1
-        if used > 5:
+        if used > 5 or (used == 5 and byte & 0x80):
             raise ValueError('overlong varint')
         value |= (byte & 0x7F) << shift
         if byte & 0x80:
@@ -77,6 +77,8 @@ def _varints(raw, count):
             raise ValueError('overlong varint')
         out.append(value)
         value, shift, used = 0, 0, 0
+    if used:
+        raise ValueError('truncated varint')
     if len(out) != count:
         raise ValueError(f'{len(out)} block indices for {count} cells')
     return out

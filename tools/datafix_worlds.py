@@ -287,7 +287,7 @@ class Bot:
                 return False
             pos, n = lab.parse_varint(data, pos)
             return data[pos:pos + n] == b'minecraft'
-        except IndexError:
+        except (IndexError, ValueError):
             return False
 
     def idle(self):

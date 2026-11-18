@@ -60,6 +60,7 @@ def parse_varint(buf, i=0):
         n |= (b & 0x7F) << shift
         shift += 7
         if not b & 0x80:
+            n &= 0xFFFFFFFF
             if n & 0x80000000:  # Minecraft VarInts are signed 32-bit ints (as in net_capture.read_varint)
                 n -= 1 << 32
             return n, i
