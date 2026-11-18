@@ -116,8 +116,10 @@ def _cfg_without_test(text):
     deliberately conservative: failing to prove a test-only item must not hide a production layer edge.
     """
     text = text.strip()
-    if text == "test":
+    if text in ("test", "false"):
         return False
+    if text == "true":
+        return True
     group = re.fullmatch(r"(all|any|not)\s*\((.*)\)", text, re.S)
     if not group:
         return None

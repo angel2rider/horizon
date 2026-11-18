@@ -67,6 +67,20 @@ class TestRegionsTest(unittest.TestCase):
                 regions, _ = self.regions(source)
                 self.assertEqual(regions, [])
 
+    def test_boolean_cfg_literals_follow_rust_semantics(self):
+        for attr, exempt in (
+            ("#[cfg(any(test, false))]", True),
+            ("#[cfg(any(test, true))]", False),
+            ("#[cfg(not(true))]", True),
+            ("#[cfg(not(false))]", False),
+        ):
+            for item in ("fn edge() { mod_api::run(); }", "mod child;"):
+                with self.subTest(attr=attr, item=item):
+                    source = f"{attr}\n{item}\n"
+                    regions, mods = self.regions(source)
+                    self.assertEqual(rt.in_regions(regions, source.index(item)), exempt)
+                    self.assertEqual(mods, ["child"] if exempt and item == "mod child;" else [])
+
     def test_mod_declared_under_stacked_cfg_is_a_test_mod(self):
         source = '#[cfg(all(test, feature = "x"))]\nmod hidden;\n'
         _, mods = self.regions(source)
