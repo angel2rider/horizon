@@ -10,7 +10,7 @@ TOKEN = re.compile(r"//|/\*|(?<![\w])[bc]?r(#*)\"|\"|'")
 COMMENT_EDGE = re.compile(r"/\*|\*/")
 STRING_REST = re.compile(r'(?:[^"\\]|\\.)*"', re.S)
 # Any attribute that can gate an item on the `test` cfg: `#[test]` or `#[cfg(...)]`. The predicate itself is
-# parsed by `_is_test_attr`, so `all(...)`, `any(...)` and nested combinations are handled alike. `cfg_attr` is
+# parsed by `_is_test_attr`; only predicates that cannot enable production code are exempt. `cfg_attr` is
 # deliberately not a candidate: it adds attributes under `test` without gating the item, so treating its items as
 # test-only would hide production edges from the layer gate.
 TEST_ATTR = re.compile(r"#\[\s*(?:test\s*\]|cfg\s*\()")
@@ -109,39 +109,57 @@ def attr_end(code, pos):
     return len(code)
 
 
-def _has_positive_test(text):
-    """Whether blanked cfg text has a `test` predicate outside every `not(...)` group."""
-    negated = []  # one entry per open paren: True when it is a `not(...)` group
-    word, i, end = "", 0, len(text)
-    while i < end:
-        c = text[i]
-        if c.isalnum() or c == "_":
-            j = i + 1
-            while j < end and (text[j].isalnum() or text[j] == "_"):
-                j += 1
-            word = text[i:j]
-            if word == "test" and not any(negated):
-                return True
-            i = j
-        elif c == "(":
-            negated.append(word == "not")
-            word, i = "", i + 1
+def _cfg_without_test(text):
+    """Known value with `test = false`, or None when other cfg options may enable it.
+
+    Unknown predicates stay unknown, including key/value options whose strings have been blanked. This is
+    deliberately conservative: failing to prove a test-only item must not hide a production layer edge.
+    """
+    text = text.strip()
+    if text == "test":
+        return False
+    group = re.fullmatch(r"(all|any|not)\s*\((.*)\)", text, re.S)
+    if not group:
+        return None
+    name, body = group.groups()
+    args, depth, start = [], 0, 0
+    for i, c in enumerate(body):
+        if c == "(":
+            depth += 1
         elif c == ")":
-            if negated:
-                negated.pop()
-            word, i = "", i + 1
-        elif c.isspace():
-            i += 1  # keep `word` so `not ( test )` is recognised
-        else:
-            word, i = "", i + 1
-    return False
+            depth -= 1
+            if depth < 0:
+                return None
+        elif c == "," and depth == 0:
+            arg = body[start:i].strip()
+            if not arg:
+                return None
+            args.append(arg)
+            start = i + 1
+    if depth:
+        return None
+    if tail := body[start:].strip():
+        args.append(tail)
+    values = [_cfg_without_test(arg) for arg in args]
+    if name == "not":
+        if len(values) != 1 or values[0] is None:
+            return None
+        return not values[0]
+    if name == "all":
+        if False in values:
+            return False
+        return True if all(value is True for value in values) else None
+    if True in values:
+        return True
+    return False if all(value is False for value in values) else None
 
 
 def _is_test_attr(text):
-    """Whether a `#[...]` attribute gates the item on the `test` cfg."""
+    """Whether a `#[...]` attribute prevents the item from running without `test`."""
     if re.match(r"#\[\s*test\s*\]", text):
         return True
-    return bool(re.match(r"#\[\s*cfg\s*\(", text) and _has_positive_test(blank(text)))
+    cfg = re.fullmatch(r"#\[\s*cfg\s*\((.*)\)\s*\]", text, re.S)
+    return bool(cfg and _cfg_without_test(blank(cfg.group(1))) is False)
 
 
 def test_regions(code):

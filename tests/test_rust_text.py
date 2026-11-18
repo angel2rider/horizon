@@ -26,18 +26,34 @@ class TestRegionsTest(unittest.TestCase):
         self.assertTrue(rt.in_regions(regions, source.index("mod t")))
         self.assertTrue(rt.in_regions(regions, source.index("helper")))
 
-    def test_other_cfg_shapes_with_test_are_test_regions(self):
+    def test_other_cfg_shapes_that_require_test_are_test_regions(self):
         for attr in (
-            '#[cfg(any(test, feature = "x"))]',
             "#[cfg(all(unix, test))]",
             '#[cfg(all(not(unix), test, feature = "x"))]',
-            '#[cfg(all(feature = "x", any(unix, test)))]',
+            '#[cfg(any(test, all(test, feature = "x")))]',
+            "#[cfg(not(not(test)))]",
+            "#[cfg(not(any(not(test), unix)))]",
         ):
             with self.subTest(attr=attr):
                 source = f"{attr}\nfn t() {{}}\n"
                 regions, _ = self.regions(source)
                 self.assertEqual(len(regions), 1)
                 self.assertTrue(rt.in_regions(regions, source.index("fn t")))
+
+    def test_production_enabled_cfgs_do_not_exempt_items_or_child_modules(self):
+        for attr in (
+            '#[cfg(any(test, feature = "x"))]',
+            '#[cfg(all(feature = "x", any(unix, test)))]',
+            '#[cfg(any(feature = "test", test))]',
+            "#[cfg(not(all(test, unix)))]",
+            "#[cfg_attr(test, inline)]",
+            "#[cfg(all())]",
+        ):
+            for item in ("fn prod() {}", "mod child;"):
+                with self.subTest(attr=attr, item=item):
+                    regions, mods = self.regions(f"{attr}\n{item}\n")
+                    self.assertEqual(regions, [])
+                    self.assertEqual(mods, [])
 
     def test_negated_and_string_test_are_not_test_regions(self):
         for attr in (
