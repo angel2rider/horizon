@@ -270,14 +270,13 @@ GENERATORS = [
 def status(root, outputs):
     """unchanged, or regenerated with {path: [added, removed]} against the candidate's last commit."""
     stat = {}
+    # `git diff` never lists untracked files: mark a first-time output as intent-to-add so it counts.
+    new = git("ls-files", "-z", "--others", "--exclude-standard", "--", *outputs, cwd=root).split("\0")
+    if any(new):
+        git("add", "-N", "--", *filter(None, new), cwd=root)
     for line in git("diff", "--numstat", "HEAD", "--", *outputs, cwd=root).splitlines():
         added, removed, path = line.split("\t")
         stat[path] = [int(added), int(removed)]
-    # `git diff` never lists an untracked file, so a generator that creates a brand-new output was
-    # reported as "unchanged" and `commit()` dropped it. Count its lines as all added.
-    for path in git("ls-files", "--others", "--exclude-standard", "--", *outputs, cwd=root).splitlines():
-        if path not in stat:
-            stat[path] = [len((root / path).read_text().splitlines()), 0]
     return ("regenerated", stat) if stat else ("unchanged", {})
 
 
