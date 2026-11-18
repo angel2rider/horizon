@@ -57,6 +57,17 @@ class CompareSymmetricLabelsTest(unittest.TestCase):
         self.assertTrue(failures, 'a duplicate Rust row must be reported')
         self.assertIn('L0', '\n'.join(failures))
 
+    def test_equal_duplicate_counts_are_mismatches(self):
+        for first in (_rust('L0', [0, 1, 2, 3]), {'label': 'L0', 'error': 'early probe error'}):
+            with self.subTest(first=first):
+                vanilla, rust = self._matching_rows()
+                vanilla.insert(0, _vanilla('L0', [0, 1, 2, 3]))
+                rust.insert(0, first)
+                failures, stacks, covered = tool.compare(vanilla, rust)
+                self.assertTrue(failures, 'equal duplicate counts must not hide an earlier Rust row')
+                self.assertIn('L0', '\n'.join(failures))
+                self.assertEqual(covered, {0, 1, 2, 3})
+
 
 if __name__ == '__main__':
     unittest.main()

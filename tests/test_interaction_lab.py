@@ -26,6 +26,22 @@ class CargoExampleTests(unittest.TestCase):
 
 
 class CompareTests(unittest.TestCase):
+    def test_empty_cases_reject_unexpected_output(self):
+        for native_text, rust_text, expected in (
+            ('', '', 0),
+            ('unexpected\n', '', 1),
+            ('', 'unexpected\n', 1),
+            ('unexpected\n', 'unexpected\n', 1),
+        ):
+            with self.subTest(native=native_text, rust=rust_text), tempfile.TemporaryDirectory() as d:
+                native = Path(d) / 'native.txt'
+                rust = Path(d) / 'rust.txt'
+                native.write_text(native_text)
+                rust.write_text(rust_text)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    total = interaction_lab.compare([], native, rust, key=lambda case, a: case)
+                self.assertEqual(total, expected)
+
     def test_truncated_rust_output_is_a_failure(self):
         cases = [{'i': i} for i in range(5)]
         with tempfile.TemporaryDirectory() as d:

@@ -67,7 +67,7 @@ def compare(cases, native_path, rust_path, key, describe=None, limit=3):
         # the missing cases as matches. Count the whole run as differing so the
         # driver exits non-zero.
         print(f'line counts differ: cases {len(cases)} native {len(native)} rust {len(rust)}')
-        return len(cases)
+        return max(1, len(cases))
     groups = {}
     for case, a, b in zip(cases, native, rust, strict=True):
         if a != b:

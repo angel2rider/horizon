@@ -120,7 +120,7 @@ def compare(vanilla, rust):
     # rows that would otherwise be silently accepted as a green pass.
     for label in sorted(set(vanilla_labels) | set(rust_labels)):
         expected, got = vanilla_labels.count(label), rust_labels.count(label)
-        if expected != got:
+        if expected != got or got > 1:
             failures.append(f'{label}: {expected} vanilla rows, {got} Rust rows')
     for v in vanilla:
         if 'error' in v:
