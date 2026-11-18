@@ -196,7 +196,8 @@ def authorize(actor: Actor, reviewers: Reviewers) -> None:
 
 def guarded_patterns(codeowners: str) -> list[str]:
     """The paths CODEOWNERS guards (the council reviews them), plus ALWAYS_GUARDED."""
-    found = [line.split()[0] for line in codeowners.splitlines() if line.strip().startswith("/")]
+    found = [words[0] for line in codeowners.splitlines()
+             if (words := line.split()) and not words[0].startswith("#")]
     return sorted(set(found + ALWAYS_GUARDED))
 
 
@@ -229,6 +230,10 @@ def _pattern_regex(pattern: str, *, folder: bool = False) -> re.Pattern:
 def guarded(path: str, patterns: list[str]) -> bool:
     p = "/" + path.lstrip("/")
     for pat in patterns:
+        if not pat.startswith("/"):
+            # A single name (including a trailing directory slash) applies at
+            # any depth; a path containing an internal slash is root-relative.
+            pat = "/" + ("**/" if "/" not in pat.rstrip("/") else "") + pat
         if pat.endswith("/"):
             if "*" in pat or "?" in pat:
                 if _pattern_regex(pat.rstrip("/"), folder=True).match(p):

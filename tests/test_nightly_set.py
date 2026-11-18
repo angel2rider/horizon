@@ -239,6 +239,30 @@ class RefusalTests(unittest.TestCase):
         self.assertFalse(ns.guarded('other/x/a.rs', patterns))  # negative control
         self.assertFalse(ns.guarded('other/x/y/a.rs', patterns))  # the folder must be under packages/
 
+    def test_unrooted_codeowners_rules_guard_at_their_path_scope(self):
+        cases = (
+            ('owned', ('owned', 'owned/a.txt', 'nested/owned/a.txt'),
+             ('owned-other/a.txt', 'nested/owned-other/a.txt')),
+            ('owned/', ('owned/a.txt', 'nested/owned/a.txt'),
+             ('owned', 'owned-other/a.txt')),
+            ('*.rs', ('a.rs', 'nested/a.rs', 'nested/a.rs/notes.txt'),
+             ('a.rs.bak', 'nested/a.txt')),
+            ('packages/*/', ('packages/a/x.txt', 'packages/a/nested/x.txt'),
+             ('nested/packages/a/x.txt', 'packages-other/a/x.txt')),
+            ('shared/owned', ('shared/owned', 'shared/owned/a.txt'),
+             ('nested/shared/owned/a.txt', 'shared/owned-other/a.txt')),
+            ('/owned', ('owned', 'owned/a.txt'),
+             ('nested/owned/a.txt', 'owned-other/a.txt')),
+        )
+        for rule, guarded, unguarded in cases:
+            with self.subTest(rule=rule):
+                patterns = ns.guarded_patterns(f'# ignored @council\n\n  {rule} @council\n')
+                for path in guarded:
+                    self.assertTrue(ns.guarded(path, patterns), path)
+                for path in unguarded:
+                    self.assertFalse(ns.guarded(path, patterns), path)
+                self.assertFalse(ns.guarded('#/notes.txt', patterns))
+
 
     def test_a_set_with_a_refused_pull_request_changes_nothing(self):
         state = {"prs": []}
