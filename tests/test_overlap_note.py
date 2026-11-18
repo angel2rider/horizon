@@ -82,11 +82,19 @@ class FunctionTests(unittest.TestCase):
 class OneNoteTests(unittest.TestCase):
     def test_two_racing_notes_become_one(self):
         calls = []
+        comments = {11: "first note", 12: "racing note", 13: "unrelated comment"}
 
         def fake_gh(*arguments, **options):
             calls.append(arguments)
             url = next((value for value in arguments if value.startswith("repos/")), "")
-            return "11\n12\n" if "/comments?" in url else ""
+            if "/comments?" in url:
+                return "11\n12\n"
+            comment = int(url.rsplit("/", 1)[1])
+            if "PATCH" in arguments:
+                comments[comment] = next(value.removeprefix("body=") for value in arguments if value.startswith("body="))
+            elif "DELETE" in arguments:
+                del comments[comment]
+            return ""
 
         with mock.patch.object(ov, "gh", fake_gh):
             api = ov.Api("o/r")
@@ -99,15 +107,25 @@ class OneNoteTests(unittest.TestCase):
         self.assertTrue(any(value.endswith("/issues/comments/11") for value in patched[0]))
         self.assertEqual(len(deleted), 1)
         self.assertTrue(deleted[0][-1].endswith("/issues/comments/12"))
+        self.assertEqual(comments, {11: "edited", 13: "unrelated comment"})
 
     def test_no_note_creates_one(self):
         calls = []
-        with mock.patch.object(ov, "gh", lambda *arguments, **options: calls.append(arguments) or ""):
+        comments = []
+
+        def fake_gh(*arguments, **options):
+            calls.append(arguments)
+            if "-f" in arguments:
+                comments.append(next(value.removeprefix("body=") for value in arguments if value.startswith("body=")))
+            return ""
+
+        with mock.patch.object(ov, "gh", fake_gh):
             api = ov.Api("o/r")
             self.assertEqual(api.own_note(5), [])
             api.write(5, [], "new")
         self.assertEqual(len(calls), 2)
         self.assertIn("-f", calls[1])
+        self.assertEqual(comments, ["new"])
 
 
 class OverlapTests(unittest.TestCase):
