@@ -6,25 +6,18 @@ real region file and compares the whole returned dict (chunk set, coordinates an
 """
 
 import gzip
-import importlib.util
 import struct
+import sys
 import tempfile
 import unittest
 import zlib
 from pathlib import Path
 
-TOOLS = Path(__file__).resolve().parents[1] / "tools"
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-
-def load_tool(name):
-    spec = importlib.util.spec_from_file_location("w08_" + name, TOOLS / (name + ".py"))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-world_compare = load_tool("world_compare")
-anvil_dump = load_tool("anvil_dump")
+from tools import anvil_dump, world_compare  # noqa: E402
 
 
 def utf(text):
