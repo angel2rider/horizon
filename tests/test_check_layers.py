@@ -2,6 +2,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -39,6 +40,8 @@ def run(*packages, allowed=(), base=None, crates=None):
 
 def cargo_packages(source="game", target="cosmetics", *, path=False, rename=None, optional=False):
     """Actual offline Cargo metadata, including the real rename field and resolved package IDs."""
+    if not shutil.which("cargo"):
+        raise unittest.SkipTest("requires Cargo")
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         (root / "Cargo.toml").write_text(
