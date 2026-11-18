@@ -25,10 +25,10 @@ class TagKeyTests(unittest.TestCase):
         self.assertLess(legacy.tag_key("launcher@0.2.9"), legacy.tag_key("launcher@0.2.10"))
 
     def test_a_release_sorts_after_its_release_candidates(self):
-        tags = ["v1.2.3-rc.1", "v1.2.3", "v1.9.0", "v1.10.0"]
+        tags = ["v1.2.3-rc.10", "v1.2.3", "v1.2.3-rc.2", "v1.9.0", "v1.10.0", "v1.2.3-rc.1"]
         self.assertEqual(
             sorted(tags, key=legacy.tag_key),
-            ["v1.2.3-rc.1", "v1.2.3", "v1.9.0", "v1.10.0"],
+            ["v1.2.3-rc.1", "v1.2.3-rc.2", "v1.2.3-rc.10", "v1.2.3", "v1.9.0", "v1.10.0"],
         )
         self.assertLess(legacy.tag_key("v1.2.3-rc.1"), legacy.tag_key("v1.2.3"))
 
