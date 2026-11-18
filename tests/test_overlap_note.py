@@ -106,17 +106,21 @@ class OneNoteTests(unittest.TestCase):
         self.assertEqual(len(patched), 1)
         self.assertTrue(any(value.endswith("/issues/comments/11") for value in patched[0]))
         self.assertEqual(len(deleted), 1)
-        self.assertTrue(deleted[0][-1].endswith("/issues/comments/12"))
+        self.assertTrue(any(value.endswith("/issues/comments/12") for value in deleted[0]))
         self.assertEqual(comments, {11: "edited", 13: "unrelated comment"})
 
     def test_no_note_creates_one(self):
         calls = []
-        comments = []
+        comments = {("o/r", 5): [], ("o/r", 6): ["unrelated comment"]}
 
         def fake_gh(*arguments, **options):
             calls.append(arguments)
             if "-f" in arguments:
-                comments.append(next(value.removeprefix("body=") for value in arguments if value.startswith("body=")))
+                url = next(value for value in arguments if value.startswith("repos/"))
+                parts = url.split("/")
+                target = ("/".join(parts[1:3]), int(parts[-2]))
+                comments.setdefault(target, []).append(
+                    next(value.removeprefix("body=") for value in arguments if value.startswith("body=")))
             return ""
 
         with mock.patch.object(ov, "gh", fake_gh):
@@ -125,7 +129,7 @@ class OneNoteTests(unittest.TestCase):
             api.write(5, [], "new")
         self.assertEqual(len(calls), 2)
         self.assertIn("-f", calls[1])
-        self.assertEqual(comments, ["new"])
+        self.assertEqual(comments, {("o/r", 5): ["new"], ("o/r", 6): ["unrelated comment"]})
 
 
 class OverlapTests(unittest.TestCase):
