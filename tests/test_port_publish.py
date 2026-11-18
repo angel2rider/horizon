@@ -49,17 +49,21 @@ class PublishTests(unittest.TestCase):
 
     def test_refuses_code(self):
         for line in ["```java\nint x = 1;\n```", "    return this.foodLevel;", "public void tick(Player player) {",
-                     "- `if (x) { y(); }`", "import net.minecraft.world.food.FoodData;"]:
+                     "- `if (x) { y(); }`", "`int remaining=42;`", "`this.field=12345;`",
+                     "import net.minecraft.world.food.FoodData;"]:
             with self.assertRaises(ValueError, msg=line):
                 publish.assert_no_code(line)
         publish.assert_no_code("- `<init>(Lnet/minecraft/core/RegistryAccess;Lnet/minecraft/world/Foo;)V`, `a()V`")
         publish.assert_no_code("- `ParityData.java:45: cannot find symbol: variable WORLD (class RegistryLayer)`")
 
     def test_a_non_compile_failure_diagnostic_reaches_the_issue(self):
-        item = {"rank": 1, "kind": "regen-failed", "title": "Generator foo: failed on 26.4",
-                "files": ["crates/foo.rs"], "error": "Traceback:\nKeyError: bar"}
-        text = publish.body(item, REPORT, DIFF, "/tmp/store")
-        self.assertIn("KeyError: bar", text)
+        for error, expected in (("Traceback:\nKeyError: bar", "KeyError: bar"),
+                                ("RuntimeError: status=1", "RuntimeError: status=1")):
+            with self.subTest(error=error):
+                item = {"rank": 1, "kind": "regen-failed", "title": "Generator foo: failed on 26.4",
+                        "files": ["crates/foo.rs"], "error": error}
+                text = publish.body(item, REPORT, DIFF, "/tmp/store")
+                self.assertIn(expected, text)
 
     def test_a_plain_java_statement_is_refused(self):
         for line in ("    int remaining = 42;", "        doThing();", "    this.field = 12345;", "        foo(bar);"):
