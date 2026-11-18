@@ -125,6 +125,8 @@ def candidate_blobs(revisions, baseline):
         parts = metadata[1:].split()
         if len(parts) < 5 or parts[4] not in ("A", "M", "T"):
             continue
+        if parts[1] == "160000":  # A gitlink names a commit, not a file blob.
+            continue
         blob = parts[3]
         # Retired paths are the documented legacy exception: allowed in history, denied in the tree.
         if path in RETIRED_TABLES or blob in baseline:

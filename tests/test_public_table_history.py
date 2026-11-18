@@ -133,6 +133,35 @@ class PublicTableHistoryTests(unittest.TestCase):
                 self.assertIn("Public tree check passed.", result.stdout)
         self.assertEqual(self.check().returncode, 0)
 
+    def test_gitlink_changes_are_ignored_but_a_replacement_blob_is_scanned(self):
+        self.git("init", "-q", "-b", "main")
+        base = self.commit("README.md", "public fixture\n")
+        path = "vendor/submodule"
+        # A gitlink names a commit, which need not exist in this repository's object database.
+        for commit in (base, "f" * 40):
+            self.git("update-index", "--add", "--cacheinfo", f"160000,{commit},{path}")
+            self.git("commit", "-q", "-m", "change gitlink")
+            head = self.git("rev-parse", "HEAD")
+            push = f"refs/heads/main {head} refs/heads/main {base}\n"
+            for mode, input in ((["--range", f"{base}..HEAD"], None),
+                                (["--history"], None), (["--pre-push"], push)):
+                with self.subTest(commit=commit, mode=mode):
+                    result = self.check(*mode, input=input)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+
+        # A type change back to a file must still scan the destination blob at the same path.
+        self.commit(path, table_text(60))
+        self.git("rm", "-q", path)
+        self.git("commit", "-q", "-m", "delete replacement table")
+        head = self.git("rev-parse", "HEAD")
+        push = f"refs/heads/main {head} refs/heads/main {base}\n"
+        for mode, input in ((["--range", f"{base}..HEAD"], None),
+                            (["--history"], None), (["--pre-push"], push)):
+            with self.subTest(mode=mode):
+                result = self.check(*mode, input=input)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn(path, result.stderr)
+
     def test_staged_table_is_ignored_in_history_and_empty_push(self):
         self.git("init", "-q", "-b", "main")
         base = self.commit("README.md", "public fixture\n")
