@@ -65,6 +65,15 @@ class EntriesTests(unittest.TestCase):
             ["v1.2.3-rc.1", "v1.2.3"],
         )
 
+    def test_non_decimal_label_digits_are_preserved_as_text(self):
+        releases = [release(tag, [asset("game")]) for tag in
+                    ["v1.2.3", "v1.2.3-rc.1²2", "v1.2.3-rc.1²1"]]
+        self.assertEqual(
+            legacy.entries(releases),
+            [f"{tag} game {'ab' * 32}" for tag in
+             ["v1.2.3-rc.1²1", "v1.2.3-rc.1²2", "v1.2.3"]],
+        )
+
 
 class RenderTests(unittest.TestCase):
     def test_the_header_names_the_file_and_its_writer(self):

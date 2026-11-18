@@ -40,7 +40,7 @@ def tag_key(tag):
     base = tuple(int(part) for part in match.group(2).split("."))
     label = match.group(3).lstrip("-").lower()
     # Keep candidate numbers numeric too: rc.2 precedes rc.10, not the other way around.
-    label_key = tuple((0, int(part)) if part.isdigit() else (1, part)
+    label_key = tuple((0, int(part)) if part.isdecimal() else (1, part)
                       for part in re.findall(r"\d+|\D+", label))
     return (prefix, base, 0 if label else 1, label_key)
 
