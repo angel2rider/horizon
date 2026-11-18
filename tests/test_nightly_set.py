@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import tempfile
@@ -224,10 +225,12 @@ class RefusalTests(unittest.TestCase):
         self.assertTrue(ns.guarded("tools/ci/x.py", ns.guarded_patterns("")))  # even without CODEOWNERS
 
     def test_wildcard_and_slashless_directory_patterns_guard_descendants(self):
-        patterns = ns.guarded_patterns('/packages/** @council\n/council-only @council\n/tools/ci/*.py @council\n')
+        patterns = ns.guarded_patterns('/packages/** @council\n/council-only @council\n/scripts/*.py @council\n')
         self.assertTrue(ns.guarded('packages/x/y.rs', patterns))
         self.assertTrue(ns.guarded('council-only/notes/x.md', patterns))
-        self.assertTrue(ns.guarded('tools/ci/nightly_set.py', patterns))
+        self.assertTrue(ns.guarded('scripts/task.py', patterns))
+        self.assertFalse(ns.guarded('scripts/task.txt', patterns))
+        self.assertFalse(ns.guarded('scripts/task.py\n', patterns))
         self.assertFalse(ns.guarded('packages-dev/x.rs', patterns))
         self.assertFalse(ns.guarded('council-only-other/x.md', patterns))
 
@@ -236,8 +239,20 @@ class RefusalTests(unittest.TestCase):
         self.assertTrue(ns.guarded('packages/x/a.rs', patterns))
         self.assertTrue(ns.guarded('packages/x.rs', patterns))  # **/ matches zero folders
         self.assertTrue(ns.guarded('packages/a/b/x.rs', patterns))
+        self.assertTrue(ns.guarded('packages/line\nname/x.rs', patterns))
         self.assertFalse(ns.guarded('other/x/a.rs', patterns))  # negative control
         self.assertFalse(ns.guarded('other/x/y/a.rs', patterns))  # the folder must be under packages/
+
+    def test_terminal_star_differs_from_an_explicit_directory_rule(self):
+        patterns = ns.guarded_patterns('docs/* @council\n')
+        self.assertTrue(ns.guarded('docs/getting-started.md', patterns))
+        self.assertFalse(ns.guarded('docs/build-app/troubleshooting.md', patterns))
+        self.assertTrue(ns.guarded('docs/build-app/troubleshooting.md',
+                                   ns.guarded_patterns('docs/*/ @council\n')))
+        self.assertTrue(ns.guarded('nested/logs/today.txt',
+                                   ns.guarded_patterns('**/logs @council\n')))
+        self.assertTrue(ns.guarded('nested/line\nname/logs/today.txt',
+                                   ns.guarded_patterns('**/logs @council\n')))
 
     def test_unrooted_codeowners_rules_guard_at_their_path_scope(self):
         cases = (
@@ -262,6 +277,24 @@ class RefusalTests(unittest.TestCase):
                 for path in unguarded:
                     self.assertFalse(ns.guarded(path, patterns), path)
                 self.assertFalse(ns.guarded('#/notes.txt', patterns))
+
+    def test_lookup_preserves_paginated_and_renamed_paths_for_the_guard(self):
+        pages = [[{"filename": "unowned/readme.txt", "previous_filename": "packages/line\nname.rs"}],
+                 [{"filename": "packages/café.rs"}, {"filename": "unowned/café.rs"}]]
+        paths = ["unowned/readme.txt", "packages/line\nname.rs", "packages/café.rs", "unowned/café.rs"]
+
+        def gh(*args, **kwargs):
+            if args[1] == "repos/owner/repo/pulls/123":
+                return json.dumps({"state": "open", "head": {"sha": "a" * 40}, "title": "paths",
+                                   "user": {"login": "dev"}, "base": {"ref": "main"}})
+            return "\n".join(paths) if "--jq" in args else json.dumps(pages)
+
+        with mock.patch.object(ns, "gh", gh):
+            candidate = ns.lookup("owner/repo")(123)
+        self.assertEqual(candidate.files, paths)
+        patterns = ns.guarded_patterns("/packages/*.rs @council\n")
+        self.assertIn("only the council merges", ns.check(candidate, 123, patterns))
+        self.assertIsNone(ns.check(pr(124, files=["unowned/café.rs"]), 124, patterns))
 
 
     def test_a_set_with_a_refused_pull_request_changes_nothing(self):
@@ -395,6 +428,24 @@ class AssemblyTests(unittest.TestCase):
 
     def test_changed_files_finds_guarded_paths(self):
         self.assertEqual(sorted(ns.changed_files(self.main, self.p2, cwd=self.repo)), [".gitattributes", "b.txt"])
+
+    def test_changed_files_preserves_repository_paths_for_the_guard(self):
+        # Git's display quoting and text/newline decoding must not change the paths
+        # the guard sees. Include an unrelated file to control the guard's scope.
+        paths = ("packages/café.rs", "packages/ space .rs", "unowned/café.rs")
+        if os.name != "nt":
+            paths += ("packages/tab\tname.rs", "packages/line\nname.rs", "packages/carriage\rname.rs",
+                      os.fsdecode(b"packages/invalid-\xff.rs"))
+        for path in paths:
+            target = Path(self.repo, path)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("new\n")
+        head = self.commit("paths Git would quote")
+        changed = ns.changed_files(self.main, head, cwd=self.repo)
+        self.assertCountEqual(changed, paths)
+        patterns = ns.guarded_patterns("/packages/*.rs @council\n")
+        for path in changed:
+            self.assertEqual(ns.guarded(path, patterns), path.startswith("packages/"), path)
 
 
 class StateTests(unittest.TestCase):

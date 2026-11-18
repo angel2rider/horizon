@@ -224,7 +224,7 @@ def _pattern_regex(pattern: str, *, folder: bool = False) -> re.Pattern:
         else:
             parts.append(re.escape(pattern[i]))
             i += 1
-    return re.compile('^' + ''.join(parts) + ('/' if folder else '$'))
+    return re.compile('^' + ''.join(parts) + ('/' if folder else r'\Z'), re.DOTALL)
 
 
 def guarded(path: str, patterns: list[str]) -> bool:
@@ -242,7 +242,11 @@ def guarded(path: str, patterns: list[str]) -> bool:
                 return True
         elif "*" in pat or "?" in pat:
             pattern = _pattern_regex(pat)
-            if pattern.match(p) or any(pattern.match(p[:end]) for end, char in enumerate(p) if char == "/"):
+            # GitHub's `docs/*` example owns direct files, not their descendants.
+            # Explicit folders and literal terminal names such as **/logs still
+            # own descendants; a terminal * needs an explicit trailing slash.
+            if pattern.match(p) or (not pat.endswith("/*") and
+                                    any(pattern.match(p[:end]) for end, char in enumerate(p) if char == "/")):
                 return True  # a wildcard that names a directory guards everything under it
         elif p == pat or p.startswith(pat + "/"):
             return True  # CODEOWNERS also applies a directory path written without its trailing slash
@@ -443,8 +447,11 @@ class Conflict(Exception):
 def changed_files(base: str, head: str, cwd: str | None = None) -> list[str]:
     """What `head` changes since it left `base`, renames' old paths included."""
     since = out("merge-base", base, head, cwd=cwd)
-    names = out("diff", "--name-status", "--no-renames", since, head, cwd=cwd)
-    return [line.split("\t", 1)[1] for line in names.splitlines() if "\t" in line]
+    # NUL-delimited status/path pairs are repository bytes, not Git's quoted
+    # display names. Text decoding would also normalize newlines in a path.
+    names = subprocess.run(["git", *SAFE_GIT, "diff", "--name-status", "-z", "--no-renames", since, head],
+                           cwd=cwd, check=True, capture_output=True).stdout.split(b"\0")
+    return [os.fsdecode(path) for path in names[1::2]]
 
 
 def culprit(main: str, earlier: list[tuple[int, str]], head: str, date: str, cwd: str | None) -> int | None:
@@ -576,8 +583,9 @@ def lookup(repo: str) -> Callable[[int], PullRequest | None]:
         if not raw:
             return None
         p = json.loads(raw)
-        files = gh("api", "--paginate", f"repos/{repo}/pulls/{n}/files", "--jq",
-                   ".[] | .filename, (.previous_filename // empty)").splitlines()
+        pages = json.loads(gh("api", "--paginate", "--slurp", f"repos/{repo}/pulls/{n}/files"))
+        files = [path for page in pages for item in page
+                 for path in (item["filename"], item.get("previous_filename")) if path is not None]
         state = "merged" if p.get("merged_at") else p["state"]
         return PullRequest(n, state, p["head"]["sha"], p["title"], p["user"]["login"], p["base"]["ref"], files)
     return get
