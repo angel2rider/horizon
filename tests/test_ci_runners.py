@@ -6,8 +6,11 @@
 - Neither takes a job that holds a secret or whose token can push, publish or start workflows: playhorizon is a
   partner's server, and a checks runner keeps what a fork's job left behind.
 """
+import os
 import re
 import shlex
+import subprocess
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -17,6 +20,7 @@ LIGHT = ("horizon-light", "playhorizon-light", "playhorizon-ci")
 CHECKS = ("horizon-checks",)
 FORK_GUARD = "github.event.pull_request.head.repo.full_name == github.repository"
 VERIFY_PARTS = ("verify-tree", "verify-lint", "verify-server", "verify-launcher", "verify-test")
+AGGREGATE_PARTS = (*VERIFY_PARTS, "native-clippy")
 # verify's parts: our checks runners only with SELF_HOSTED_CI=all, Blacksmith's otherwise.
 ONLY_WITH_ALL = re.compile(r"^\$\{\{ vars\.SELF_HOSTED_CI == 'all' && fromJSON\('\[\"self-hosted\", \"linux\", "
                            r"\"horizon-checks\"\]'\) \|\| 'blacksmith-\d+vcpu-ubuntu-2404' \}\}$")
@@ -119,7 +123,7 @@ class OwnRunnerTests(unittest.TestCase):
         for part in VERIFY_PARTS:
             with self.subTest(part=part):
                 self.assertRegex(runs_on(ci[part]), ONLY_WITH_ALL)
-        self.assertIn(f"needs: [{', '.join(VERIFY_PARTS)}]", ci["verify"])
+        self.assertIn(f"needs: [{', '.join(AGGREGATE_PARTS)}]", ci["verify"])
         # Never skipped: GitHub counts a skipped required check as passed.
         self.assertIn("if: always()", ci["verify"])
 
@@ -152,6 +156,28 @@ class OwnRunnerTests(unittest.TestCase):
 
 
 class NativeClippyTests(unittest.TestCase):
+    def test_verify_rejects_failed_or_cancelled_parts_and_accepts_skips(self):
+        verify = dict(jobs((WORKFLOWS / "ci.yml").read_text()))["verify"]
+        results = dict(re.findall(r"^          ([A-Z_]+): \$\{\{ needs\.([a-z0-9_-]+)\.result \}\}$",
+                                  verify, re.M))
+        self.assertCountEqual(results.values(), AGGREGATE_PARTS)
+        script = re.search(r"^        run: \|\n((?:          .*\n)+)", verify, re.M).group(1)
+        script = textwrap.dedent(script)
+        for variable, part in results.items():
+            for result, passes in (("success", True), ("skipped", True),
+                                   ("failure", False), ("cancelled", False)):
+                with self.subTest(part=part, result=result):
+                    env = {**os.environ, **dict.fromkeys(results, "success"), variable: result}
+                    outcome = subprocess.run(["bash", "-e", "-c", script], env=env,
+                                             capture_output=True, text=True, timeout=10)
+                    self.assertEqual(outcome.returncode == 0, passes, outcome.stdout + outcome.stderr)
+        # The queue skips lint, native lint, the server build and launcher; the required aggregate still runs.
+        env = {**os.environ, **{variable: "success" if part in ("verify-tree", "verify-test") else "skipped"
+                               for variable, part in results.items()}}
+        outcome = subprocess.run(["bash", "-e", "-c", script], env=env,
+                                 capture_output=True, text=True, timeout=10)
+        self.assertEqual(outcome.returncode, 0, outcome.stdout + outcome.stderr)
+
     def test_native_lint_coverage_and_host_isolation(self):
         # The workflow is a machine-consumed contract: both platforms must check every requested crate.
         workflow = dict(jobs((WORKFLOWS / "ci.yml").read_text()))
