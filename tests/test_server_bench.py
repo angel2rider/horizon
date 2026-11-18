@@ -129,17 +129,14 @@ view_distance = 16
 enabled = true
 '''
         text = pumpkin_config(minimal, 25599, SimpleNamespace(seed=12345))
-        java = text.split('[networking.java]')[1].split('[')[0]
-        self.assertIn('seed = "12345"', text)
-        self.assertIn('white_list = false', text)
-        for line in ('address = "127.0.0.1:25599"', 'online_mode = false', 'encryption = false',
-                     'max_players = 200', 'view_distance = 10', 'simulation_distance = 10'):
-            self.assertIn(line, java)
-        self.assertIn('[telemetry]\nenabled = false\nendpoint = ""', text)
-        # Each inserted key appears once: present keys were replaced, not duplicated.
-        self.assertEqual(java.count('encryption ='), 1)
-        self.assertEqual(java.count('max_players ='), 1)
-        self.assertEqual(java.count('simulation_distance ='), 1)
+        config = tomllib.loads(text)  # Duplicate inserted keys also make parsing fail.
+        java = config['networking']['java']
+        self.assertEqual(config['seed'], '12345')
+        self.assertFalse(config['white_list'])
+        for key, value in {'address': '127.0.0.1:25599', 'online_mode': False, 'encryption': False,
+                           'max_players': 200, 'view_distance': 10, 'simulation_distance': 10}.items():
+            self.assertEqual(java[key], value)
+        self.assertEqual(config['telemetry'], {'enabled': False, 'endpoint': ''})
 
     def test_a_section_missing_from_the_template_is_created(self):
         # No [networking.query] or [telemetry] at all: the whole section must be added with every key.
@@ -148,12 +145,12 @@ enabled = true
 [networking.java]
 address = "0.0.0.0:25565"
 '''
-        text = pumpkin_config(minimal, 25599, SimpleNamespace(seed=12345))
-        self.assertIn('[networking.java]\naddress = "127.0.0.1:25599"', text)
-        self.assertIn('[networking.query]\nenabled = false\naddress = "127.0.0.1:25600"', text)
-        self.assertIn('[telemetry]\nenabled = false\nendpoint = ""', text)
-        self.assertIn('[plugins]\nenabled = false', text)
-        self.assertIn('[networking.java.authentication]\nenabled = false', text)
+        config = tomllib.loads(pumpkin_config(minimal, 25599, SimpleNamespace(seed=12345)))
+        self.assertEqual(config['networking']['java']['address'], '127.0.0.1:25599')
+        self.assertEqual(config['networking']['query'], {'enabled': False, 'address': '127.0.0.1:25600'})
+        self.assertEqual(config['telemetry'], {'enabled': False, 'endpoint': ''})
+        self.assertFalse(config['plugins']['enabled'])
+        self.assertFalse(config['networking']['java']['authentication']['enabled'])
 
     def test_empty_sections_keep_the_next_header_on_its_own_line(self):
         minimal = 'seed = "0"\n\n[networking.java]\n[telemetry]\n'
@@ -161,6 +158,27 @@ address = "0.0.0.0:25565"
         self.assertEqual(config['seed'], '12345')
         self.assertEqual(config['networking']['java']['address'], '127.0.0.1:25599')
         self.assertEqual(config['networking']['java']['simulation_distance'], 10)
+        self.assertEqual(config['telemetry'], {'enabled': False, 'endpoint': ''})
+
+    def test_existing_keys_with_other_legal_spacing_are_replaced(self):
+        minimal = 'seed\t=\t"0"\n[networking.java]\n\tmax_players=20\n  online_mode\t=\ttrue\n'
+        config = tomllib.loads(pumpkin_config(minimal, 25599, SimpleNamespace(seed=12345)))
+        self.assertEqual(config['seed'], '12345')
+        self.assertEqual(config['networking']['java']['max_players'], 200)
+        self.assertFalse(config['networking']['java']['online_mode'])
+
+    def test_a_leading_table_keeps_inserted_root_settings_at_the_root(self):
+        minimal = '[networking.java]\naddress = "0.0.0.0:25565"\n'
+        config = tomllib.loads(pumpkin_config(minimal, 25599, SimpleNamespace(seed=12345)))
+        self.assertEqual(config['seed'], '12345')
+        self.assertNotIn('seed', config['networking']['java'])
+        self.assertEqual(config['networking']['java']['address'], '127.0.0.1:25599')
+
+    def test_commented_table_headers_are_not_appended_again(self):
+        minimal = ('seed = "0"\n[networking.java] # Java listener\naddress = "0.0.0.0:25565"\n'
+                   '[telemetry]\t# Telemetry\nenabled = true\n')
+        config = tomllib.loads(pumpkin_config(minimal, 25599, SimpleNamespace(seed=12345)))
+        self.assertEqual(config['networking']['java']['address'], '127.0.0.1:25599')
         self.assertEqual(config['telemetry'], {'enabled': False, 'endpoint': ''})
 
 

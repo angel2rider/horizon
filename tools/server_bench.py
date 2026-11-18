@@ -301,19 +301,21 @@ def pumpkin_config(text, port, args):
     }
     def setting(body, key, value):
         """Replace key in a TOML body; insert it (preserving trailing whitespace) when it is absent."""
-        pattern = r'(?m)^' + re.escape(key) + r' = .*$'
+        pattern = r'(?m)^[ \t]*' + re.escape(key) + r'[ \t]*=[ \t]*.*$'
         line = f'{key} = {value}'
         if re.search(pattern, body):
             return re.sub(pattern, line, body)
         stripped = body.rstrip('\n')
         trailing = body[len(stripped):] or '\n'
         return stripped + ('\n' if stripped else '') + line + trailing
-    head, _, _ = text.partition('\n[')
+    first_table = re.search(r'(?m)^[ \t]*\[', text)
+    head = text[:first_table.start()] if first_table else text
     rest = text[len(head):]
     for key, value in top.items():
         head = setting(head, key, value)
     for name, settings in sections.items():
-        m = re.search(r'(?ms)^\[' + re.escape(name) + r'\]\n(.*?)(?=^\[|\Z)', rest)
+        m = re.search(r'(?ms)^[ \t]*\[' + re.escape(name) + r'\][ \t]*(?:#[^\n]*)?(?:\n|\Z)'
+                      r'(.*?)(?=^[ \t]*\[|\Z)', rest)
         if not m:
             # The template does not declare this section at all: add it with every declared key.
             rest = rest.rstrip('\n') + '\n[' + name + ']\n' + ''.join(f'{k} = {v}\n' for k, v in settings.items())
