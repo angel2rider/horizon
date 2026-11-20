@@ -18,9 +18,15 @@ pub fn set_source_volumes(volumes: [f32; 11]) {
 pub fn sound_source(event: &str) -> usize {
     let e = event.trim_start_matches("minecraft:");
     let index = |name: &str| SOUND_SOURCES.iter().position(|n| *n == name).unwrap_or(0);
-    const HOSTILE: [&str; 34] = [
+    const HOSTILE: [&str; 38] = [
         "zombie",
         "skeleton",
+        // Shulker and Hoglin override getSoundSource; Zoglin and Creaking
+        // extend Monster. All four are HOSTILE in pinned vanilla 26.3.
+        "shulker",
+        "hoglin",
+        "zoglin",
+        "creaking",
         "creeper",
         "spider",
         "cave_spider",
@@ -994,6 +1000,10 @@ mod tests {
             ("block.note_block.harp", 2),
             ("block.note_block.imitate.creeper", 2),
             ("block.note_block.trumpet_exposed", 2),
+            ("entity.shulker.ambient", 5),
+            ("entity.hoglin.ambient", 5),
+            ("entity.zoglin.ambient", 5),
+            ("entity.creaking.ambient", 5),
             ("entity.cow.hurt", 6),
             ("block.stone.break", 4),
             ("entity.player.hurt", 7),
