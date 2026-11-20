@@ -29,8 +29,11 @@ impl Game<'_> {
     }
     /// Primes TNT a level event announced, or, when the mods refuse, puts
     /// back the block the fire or signal had already taken out.
-    pub(super) fn prime_tnt_event(&mut self, pos: BlockPos, rot: f64) {
+    pub(super) fn prime_tnt_event(&mut self, pos: BlockPos) {
         if self.tnt_prime_allowed(pos) {
+            // PrimedTnt's constructor draws its push angle from the level
+            // random only here: a refused prime must not advance it.
+            let rot = self.world.random.next_double() * f64::from(std::f32::consts::TAU);
             self.add_primed_tnt(pos, rot, 80, None, None);
             return;
         }
