@@ -7332,11 +7332,7 @@ impl Game<'_> {
         // blocks above the head and the foot, as `in_wall` reads suffocating.
         let blocked = problem.is_none()
             && [head, foot].iter().any(|bed| {
-                let f = self
-                    .res
-                    .facts()
-                    .get(self.world.block(bed[0], bed[1] + 1, bed[2]));
-                f.full_collision && f.solid_render
+                self.state_suffocating(self.world.block(bed[0], bed[1] + 1, bed[2]))
             });
         if blocked {
             problem = Some("obstructed");
