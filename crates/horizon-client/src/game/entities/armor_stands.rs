@@ -636,8 +636,8 @@ impl Game<'_> {
     /// `LivingEntity.getEquipmentSlotForItem` through `ArmorStand.canUseSlot`:
     /// an equippable slot the stand has disabled is replaced by MAINHAND, so
     /// e.g. a helmet for a head-locked stand goes in its hand.
-    fn equipment_slot(&self, stand: &ArmorStand, stack: &ItemStack) -> usize {
-        usable_equipment_slot(stand, stand_slot(self.res.items(), stack))
+    fn equipment_slot(&self, stack: &ItemStack) -> usize {
+        stand_slot(self.res.items(), stack)
     }
     /// `ArmorStand.interact` for the stand under the crosshair, or for the
     /// stand a guest's interact packet named (its client's click point).
@@ -695,7 +695,7 @@ impl Game<'_> {
         let a = &self.armor_stands[i];
         let slot = match &held {
             Some(h) => {
-                let slot = self.equipment_slot(a, h);
+                let slot = usable_equipment_slot(a, self.equipment_slot(h));
                 // ArmorStand.interact: a disabled slot, or a hand without
                 // arms, is FAIL.
                 if a.is_disabled(slot) {
