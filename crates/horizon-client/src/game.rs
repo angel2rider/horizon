@@ -3566,7 +3566,7 @@ impl Game<'_> {
                     }
                     PlayerEffect::InteractLoot(_) => {}
                 },
-                LevelEvent::PrimeTnt { pos } => self.prime_tnt_event(pos),
+                LevelEvent::PrimeTnt { pos } => self.prime_tnt_event_checked(pos),
                 LevelEvent::BlockEvent {
                     pos,
                     state,
