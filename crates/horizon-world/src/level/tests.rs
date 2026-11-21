@@ -2744,9 +2744,10 @@ fn a_tnt_prime_event_does_not_draw_the_level_random() {
         "the refused prime advanced the level random"
     );
     assert!(
-        w.level.events.iter().any(|e| {
-            matches!(e, LevelEvent::PrimeTnt { pos: p } if *p == pos)
-        }),
+        w.level
+            .events
+            .iter()
+            .any(|e| { matches!(e, LevelEvent::PrimeTnt { pos: p } if *p == pos) }),
         "the level event still names the TNT cell"
     );
 }
