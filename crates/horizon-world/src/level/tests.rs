@@ -2730,6 +2730,7 @@ fn tnt_duper_3856_piston_keeps_original_and_primes_one_tnt() {
 /// consume that draw up front: with the rule off, vanilla leaves the level
 /// random untouched (and the TNT block in place).
 #[test]
+#[ignore = "daily"]
 fn a_tnt_prime_event_does_not_draw_the_level_random() {
     let mut w = world!();
     let mut control = world!();

@@ -48,6 +48,7 @@ impl Game<'_> {
 
     /// Primes TNT a level event announced, or, when the mods refuse, puts
     /// back the block the fire or signal had already taken out.
+    #[allow(dead_code)] // mod-facing signature; the game path uses _checked
     pub(super) fn prime_tnt_event(&mut self, pos: BlockPos, rot: f64) {
         if self.tnt_prime_allowed(pos) {
             self.add_primed_tnt(pos, rot, 80, None, None);
