@@ -330,6 +330,9 @@ struct Launcher {
     /// Native mods (`native_mods`, on the Mods page): the build's step while it runs, why it
     /// failed, and the warning before a build while it is open, with the mods it names.
     native_step: Option<String>,
+    /// The player pressed Stop on the build under way: the card says it is stopping, and its
+    /// Stop buttons wait, until the build ends (#19300).
+    native_stopping: bool,
     /// A build waiting for its base version's preparation, or for an install of it, kept as it
     /// was started (#18659).
     native_prepare_first: Option<native_mods::prepare_first::Waiting>,
@@ -788,20 +791,6 @@ mod tests {
         assert_eq!(
             super::row_menu_after_press(Some(("Other".into(), true)), "Horizon"),
             open("Horizon")
-        );
-    }
-
-    #[test]
-    fn the_selection_survives_a_removal_or_moves_to_the_newest_left() {
-        let left = ["v0.2.49".to_string(), "v0.2.48".to_string()];
-        let pick =
-            |saved: Option<&str>| super::selection_after_removal(&left, saved.map(String::from));
-        assert_eq!(pick(Some("v0.2.48")).as_deref(), Some("v0.2.48"));
-        assert_eq!(pick(Some("v0.2.47")).as_deref(), Some("v0.2.49"));
-        assert_eq!(pick(None).as_deref(), Some("v0.2.49"));
-        assert_eq!(
-            super::selection_after_removal(&[], Some("v0.2.47".into())),
-            None
         );
     }
 

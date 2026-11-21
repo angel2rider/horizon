@@ -191,6 +191,10 @@ pub struct Guest {
     pub left_reason: String,
     /// A validated movement report the mods have not ruled on yet (`player_move`).
     pub pending_move: Option<super::hub::PendingMove>,
+    /// Validated movement packets waiting to be told to `player_move_packet`, oldest first, and
+    /// the hub tick with how many were told in it (the per-tick budget, `MOVE_PACKET_BUDGET`).
+    pub move_packet_queue: VecDeque<super::hub::MovePacket>,
+    pub move_packets_told: (u64, usize),
     /// A disconnect was started ([`Guest::begin_disconnect`]); the connection closes when the
     /// server next polls it, and until then no other disconnect is sent.
     pub disconnect_pending: bool,
@@ -323,6 +327,8 @@ pub struct Guest {
     pub replay: Option<Box<super::prediction::Replay>>,
     /// What the server sent this tick that changes how the client moves (only while it records).
     pub changes: std::sync::Mutex<Vec<Change>>,
+    /// The pings sent to it that its client has not answered (`player_pong` hears only those).
+    pub pings: std::sync::Mutex<super::ping_ledger::PingLedger>,
     /// It accepted a move since the last entity range checks
     /// (ServerChunkCache.move), which then check all of its pairs again.
     pub moved: bool,
@@ -712,6 +718,8 @@ impl Guest {
             placed_at: 0,
             level_entered: 0,
             last_reported: (position, [0.0, 0.0]),
+            move_packet_queue: VecDeque::new(),
+            move_packets_told: (0, 0),
             center_sent: None,
             left_reason: String::new(),
             pending_move: None,
@@ -779,6 +787,7 @@ impl Guest {
             client_sprinting: false,
             replay: None,
             changes: Default::default(),
+            pings: Default::default(),
             moved: false,
             tab_hidden: Default::default(),
             loaded: false,
@@ -898,6 +907,12 @@ impl Guest {
         }
         if self.record.is_some() {
             self.note_change(packet);
+        }
+        if let play::Clientbound::Ping(p) = packet {
+            self.pings
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .sent(p.id, std::time::Instant::now());
         }
         match packet.try_encode() {
             Ok(body) => self.sender.send(body),
