@@ -216,6 +216,7 @@ fn doubles(values: [f64; 3]) -> Tag {
 }
 /// `Entity.collidedWithShapeMovingFrom` for a dimension box. Kept with the
 /// original mod-facing signature; the game's AABB path uses `_box` below.
+#[allow(dead_code)] // mod-facing signature; the game path uses _box
 fn touches_end_portal(from: Vec3, to: Vec3, width: f32, height: f32, pos: BlockPos) -> bool {
     let half = f64::from(width) / 2.0;
     let start = Aabb::new(
@@ -1131,6 +1132,7 @@ impl Game<'_> {
     }
     /// Original mod-facing signature: a width-by-height box. The game's
     /// AABB path calls `swept_portal_box`; this wrapper keeps mods working.
+    #[allow(dead_code)] // mod-facing signature; the game path uses _box
     fn swept_portal(
         &self,
         from: Vec3,
@@ -2402,34 +2404,34 @@ mod tests {
             )
         };
         // A dropped item falling through the slab, or in it.
-        assert!(touches_end_portal(
+        assert!(touches_end_portal_box(
             at(100.6),
             at(100.56),
             box_at(at(100.6), 0.25, 0.25),
             portal
         ));
         // One tick's fall across the whole slab, in it at neither end.
-        assert!(touches_end_portal(
+        assert!(touches_end_portal_box(
             at(101.0),
             at(99.9),
             box_at(at(101.0), 0.25, 0.25),
             portal
         ));
         // Resting below the slab (on the floor) or above it.
-        assert!(!touches_end_portal(
+        assert!(!touches_end_portal_box(
             at(100.0),
             at(100.0),
             box_at(at(100.0), 0.25, 0.25),
             portal
         ));
-        assert!(!touches_end_portal(
+        assert!(!touches_end_portal_box(
             at(100.8),
             at(100.8),
             box_at(at(100.8), 0.25, 0.25),
             portal
         ));
         // A cow standing in the portal block.
-        assert!(touches_end_portal(
+        assert!(touches_end_portal_box(
             at(100.0),
             at(100.0),
             box_at(at(100.0), 0.9, 1.4),
@@ -2437,7 +2439,7 @@ mod tests {
         ));
         // Beside it.
         let beside = Vec3::new(2.0, 100.0, 3.5);
-        assert!(!touches_end_portal(
+        assert!(!touches_end_portal_box(
             beside,
             beside,
             box_at(beside, 0.9, 1.4),
