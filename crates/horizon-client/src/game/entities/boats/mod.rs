@@ -1842,6 +1842,8 @@ mod tests {
                 "the falling boat must scan to the air row above the water"
             );
         });
+    }
+
     /// `controlBoat`'s push with `Mth`'s sine table (`(float) Math.sin(i /
     /// 10430.378350470453)`, indexed by `(long) (radians * 10430.378350470453)
     /// & 65535`) and float products. Expected values worked out apart from
