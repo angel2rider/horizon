@@ -80,8 +80,6 @@ impl Hooks for PlayerPearlProbe {
     }
 }
 
-#[test]
-#[ignore = "daily"]
 /// `ThrownEnderpearl.onHit` emits 32 PORTAL particles before the owner and
 /// teleport checks, so even an ownerless pearl bursts at its impact point.
 #[test]
@@ -115,6 +113,8 @@ fn a_landed_ender_pearl_bursts_into_portal_particles() {
     });
 }
 
+#[test]
+#[ignore = "daily"]
 fn player_pearl_keeps_acting_context_cancellation_and_mutable_damage() {
     use horizon_client::motion::PlayerMotion;
     let mode = Arc::new(AtomicU8::new(0));
