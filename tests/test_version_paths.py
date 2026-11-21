@@ -22,6 +22,10 @@ ALLOWED = {
     "tools/datapack_upgrade_fidelity.py": "compares 26.2 with 26.3 on purpose",
     "tests/test_lab.py": "builds a lock file with a version of its own",
     "tests/test_port_regen.py": "builds a lock file with a version of its own",
+    "tests/test_compare_prepare_contract.py": "builds fake prepared trees with versioned directories on purpose",
+    "tests/test_compare_prepare_work.py": "builds fake prepared trees with versioned directories on purpose",
+    "tests/test_preparation_step.py": "builds fake source trees with versioned directories on purpose",
+    "tools/ci/test_prepared_cache.py": "builds a fake prepared cache tree with versioned directories on purpose",
 }
 
 # A path that names the pinned version: a quoted literal that holds a separator, names the version
