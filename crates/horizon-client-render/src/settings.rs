@@ -980,7 +980,10 @@ mod tests {
     /// keeps audible.
     #[test]
     fn bottle_sounds_keep_their_vanilla_category() {
-        assert_eq!(super::sound_source("minecraft:item.bottle.fill_dragonbreath"), 6);
+        assert_eq!(
+            super::sound_source("minecraft:item.bottle.fill_dragonbreath"),
+            6
+        );
         assert_eq!(super::sound_source("item.bottle.fill_dragonbreath"), 6);
         assert_eq!(super::sound_source("minecraft:item.bottle.empty"), 4);
         assert_eq!(super::sound_source("item.bottle.empty"), 4);
