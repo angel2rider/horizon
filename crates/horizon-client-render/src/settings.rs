@@ -992,6 +992,8 @@ mod tests {
         );
         assert_eq!(super::sound_source("item.llama_carpet.unequip"), 6);
         assert_eq!(super::sound_source("minecraft:item.book.page_turn"), 7);
+    }
+
     /// These item id events play on SoundSource.BLOCKS in pinned vanilla 26.3.
     #[test]
     fn item_sounds_played_on_blocks_keep_their_category() {
