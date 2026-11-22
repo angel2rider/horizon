@@ -6,7 +6,6 @@ use super::{
     creatures::Finalized,
     structures::reaches_in,
 };
-use super::{Dim, Game, creatures::Finalized, structures::structures_reaching_in};
 use horizon_client::vanillagen::VanillaTerrain;
 use horizon_client::{
     biome::{BiomeInfo, SpawnEntry},
