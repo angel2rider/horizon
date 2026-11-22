@@ -3460,7 +3460,9 @@ impl crate::block_contact::InsideWalk for PlayerInside<'_, '_, '_, '_> {
         // (`entity.hurt`, the fire and the fill level), and WitherRoseBlock's
         // server-side effect.
         match name {
-            "minecraft:cactus" => self.m.environment_hurt("minecraft:cactus", 1.0)?,
+            "minecraft:cactus" => {
+                self.m.environment_hurt("minecraft:cactus", 1.0)?;
+            }
             "minecraft:lava_cauldron" => self.m.lava_cauldron_inside()?,
             "minecraft:water_cauldron" | "minecraft:powder_snow_cauldron" => {
                 self.m.layered_cauldron_inside(p);
