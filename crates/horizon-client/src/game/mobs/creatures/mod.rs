@@ -7446,8 +7446,11 @@ impl Game<'_> {
             ProjectileKind::Egg => "minecraft:entity.egg.throw",
             _ => "minecraft:entity.ender_pearl.throw",
         };
+        // SnowballItem / EggItem / EnderpearlItem.playSound: the player's
+        // feet (getX/getY/getZ), not the eye the projectile starts from.
+        let feet = [p.position.x, p.position.y, p.position.z];
         let pitch = 0.4 / (self.world.random.next_float() * 0.4 + 0.8);
-        self.audio.play(sound, Some(eye), 0.5, pitch);
+        self.audio.play(sound, Some(feet), 0.5, pitch);
         self.swing_arm();
         if !self.creative
             && let Some(s) = self.held_mut().as_mut()
