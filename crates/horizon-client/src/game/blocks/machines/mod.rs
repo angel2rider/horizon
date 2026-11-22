@@ -1193,7 +1193,7 @@ impl Game<'_> {
     /// own tick counts its cooldown down.
     pub(super) fn hoppers_catch_items(&mut self) {
         let mut i = 0;
-        while i < self.dropped.len() {
+        'items: while i < self.dropped.len() {
             let item = &self.dropped[i];
             // `ItemEntity.tick` moves 1 of 4 ticks while resting;
             // `checkInsideBlocks` only follows a move.
@@ -1205,8 +1205,7 @@ impl Game<'_> {
             }
             let b = item.bounds();
             let (lo, hi) = (b.min_position(), b.max_position());
-            let mut found = None;
-            'blocks: for x in lo.x.floor() as i32..=hi.x.floor() as i32 {
+            for x in lo.x.floor() as i32..=hi.x.floor() as i32 {
                 for y in lo.y.floor() as i32..=hi.y.floor() as i32 {
                     for z in lo.z.floor() as i32..=hi.z.floor() as i32 {
                         let state = self.world.block(x, y, z);
@@ -1225,19 +1224,12 @@ impl Game<'_> {
                             && hi.y > fy + 11.0 / 16.0
                             && lo.z < fz + 1.0
                             && hi.z > fz
+                            && self.hopper_take_item((x, y, z), i)
                         {
-                            found = Some((x, y, z));
-                            break 'blocks;
+                            continue 'items; // the next item now occupies this index
                         }
                     }
                 }
-            }
-            let Some(pos) = found else {
-                i += 1;
-                continue;
-            };
-            if self.hopper_take_item(pos, i) {
-                continue; // the item left the list; `i` is the next one
             }
             i += 1;
         }
@@ -2307,6 +2299,52 @@ mod brewing_fuel_transfer_tests {
             game.dropped.push(item);
             game.hoppers_catch_items();
             assert!(game.dropped.is_empty(), "the rim item was not taken");
+        });
+    }
+
+    #[test]
+    #[ignore = "daily"]
+    fn an_enabled_hopper_catches_an_item_overlapping_a_disabled_hopper() {
+        with_game(|game| {
+            game.world
+                .chunks
+                .insert((0, 0), Arc::new(horizon_client::chunk::Chunk::empty(0, 0)));
+            let disabled_pos = (8, 64, 8);
+            let enabled_pos = (9, 64, 8);
+            let registry = &game.pack.assets.registry;
+            let enabled = registry.default_state("minecraft:hopper").unwrap();
+            let mut disabled = registry.state(enabled).unwrap().clone();
+            disabled.properties.insert("enabled".into(), "false".into());
+            let disabled = registry.id(&disabled).unwrap();
+            let stone = registry.default_state("minecraft:stone").unwrap();
+            for ((x, y, z), state) in [(disabled_pos, disabled), (enabled_pos, enabled)] {
+                game.world.set(x, y, z, state).unwrap();
+                game.world.set(x, y + 1, z, stone).unwrap();
+                game.hoppers.insert((x, y, z), HopperState::default());
+                game.world
+                    .block_entities
+                    .insert((x, y, z), BlockEntity::Chest(vec![None; HOPPER_SLOTS]));
+            }
+            // The item spans x=8.925..9.175, overlapping both pickup boxes.
+            let mut item = ItemEntity::new(
+                2,
+                ItemStack::new("minecraft:stone", 1),
+                Vec3::new(9.05, 64.7, 8.5),
+                Vec3::ZERO,
+                0.0,
+            );
+            item.previous = Vec3::new(9.0, 64.7, 8.5);
+            game.dropped.push(item);
+            game.hoppers_catch_items();
+
+            assert!(game.dropped.is_empty());
+            let containers = game.containers();
+            let stayed_empty = containers.view(disabled_pos, false).unwrap();
+            assert!(containers.is_empty(&stayed_empty));
+            let collected = containers.view(enabled_pos, false).unwrap();
+            let stack = containers.get(&collected, 0).unwrap();
+            assert_eq!(stack.item.as_ref(), "minecraft:stone");
+            assert_eq!(stack.count, 1);
         });
     }
 
