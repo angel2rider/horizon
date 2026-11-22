@@ -71,6 +71,24 @@ pub(super) fn touching_orbs(
 }
 
 impl Game<'_> {
+    /// `Player.aiStep`'s `pickupArea`, shared by item and orb pickup:
+    /// standing, the player's box inflated by (1, 0.5, 1); riding, the union
+    /// with the vehicle's box inflated by (1, 0, 1).
+    fn pickup_area(&self, p: &horizon_client::motion::PlayerMotion) -> Aabb {
+        let w = f64::from(p.dimensions.width) / 2.0;
+        let own = Aabb::new(
+            Vec3::new(p.position.x - w, p.position.y, p.position.z - w),
+            Vec3::new(
+                p.position.x + w,
+                p.position.y + f64::from(p.dimensions.height),
+                p.position.z + w,
+            ),
+        );
+        match self.riding_box() {
+            Some(vehicle) => own.union_bounds(vehicle).inflate(Vec3::new(1.0, 0.0, 1.0)),
+            None => own.inflate(Vec3::new(1.0, 0.5, 1.0)),
+        }
+    }
     pub(super) fn tick_items(&mut self) -> FxHashMap<u32, Vec3> {
         let mut round = self.item_update_round();
         let original_moves = self.tick_dropped_items(&mut round);
@@ -349,19 +367,9 @@ impl Game<'_> {
             self.spawn_destroyed_contents(destroyed);
             return original_moves;
         }
-        let w = f64::from(p.dimensions.width) / 2.0;
-        let (min, max) = (
-            [
-                p.position.x - w - 1.0,
-                p.position.y - 0.5,
-                p.position.z - w - 1.0,
-            ],
-            [
-                p.position.x + w + 1.0,
-                p.position.y + f64::from(p.dimensions.height) + 0.5,
-                p.position.z + w + 1.0,
-            ],
-        );
+        let area = self.pickup_area(p);
+        let (lo, hi) = (area.min_position(), area.max_position());
+        let (min, max) = ([lo.x, lo.y, lo.z], [hi.x, hi.y, hi.z]);
         let feet = [p.position.x, p.position.y, p.position.z];
         let own = self.level.ensure_player_uuid();
         self.native_player_pickups(&mut items, (min, max), feet, own);
@@ -629,21 +637,7 @@ impl Game<'_> {
         // Player.aiStep: standing, the pickup area is the player's box
         // inflated by (1, 0.5, 1); riding, the union with the vehicle's box
         // inflated by (1, 0, 1).
-        let bounds = player.map(|p| {
-            let w = f64::from(p.dimensions.width) / 2.0;
-            let own = Aabb::new(
-                Vec3::new(p.position.x - w, p.position.y, p.position.z - w),
-                Vec3::new(
-                    p.position.x + w,
-                    p.position.y + f64::from(p.dimensions.height),
-                    p.position.z + w,
-                ),
-            );
-            match self.riding_box() {
-                Some(vehicle) => own.union_bounds(vehicle).inflate(Vec3::new(1.0, 0.0, 1.0)),
-                None => own.inflate(Vec3::new(1.0, 0.5, 1.0)),
-            }
-        });
+        let bounds = player.map(|p| self.pickup_area(p));
         let mut orbs = self.orbs.lift();
         #[cfg(test)]
         crate::game::entity::taken_pass_tests::after_take(self);
