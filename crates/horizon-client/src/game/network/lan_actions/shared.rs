@@ -2406,6 +2406,7 @@ mod pickup_xp_tests {
                 attachment_lifetime: Default::default(),
                 rotation: [0.0, 0.0],
                 join: Default::default(),
+                section_order: 0,
                 id: 40,
                 position: p,
                 previous: p,

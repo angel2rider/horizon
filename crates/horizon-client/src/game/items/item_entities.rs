@@ -48,8 +48,8 @@ pub(super) fn bob_offset(position: Vec3, drawn: f32, still: bool) -> f32 {
     drawn * std::f32::consts::PI * 2.0
 }
 
-/// `Player.aiStep` sees the level's section order. A stable sort keeps the
-/// orb list order within each section.
+/// `Player.aiStep` sees sections in traversal order and each section's orbs
+/// in the order they entered it.
 pub(super) fn touching_orbs(
     orbs: &horizon_client::join_seq::JoinList<ExperienceOrb>,
     area: Aabb,
@@ -60,7 +60,13 @@ pub(super) fn touching_orbs(
         .filter(|(_, orb)| orb.bounds().intersects(area))
         .map(|(index, _)| index)
         .collect();
-    touching.sort_by_key(|&index| super::entity_sections::section_order(orbs[index].position));
+    touching.sort_by_key(|&index| {
+        let orb = &orbs[index];
+        (
+            super::entity_sections::section_order(orb.position),
+            orb.section_order,
+        )
+    });
     touching
 }
 
@@ -579,6 +585,7 @@ impl Game<'_> {
             fall_distance: 0.0,
             rotation: [0.0, 0.0],
             join: Default::default(),
+            section_order: 0,
             no_gravity: false,
             id: self.next_entity,
             position: p,
@@ -1131,13 +1138,14 @@ mod orb_pickup_tests {
 
         let mut resources = None;
         let mut game = server_game(&mut resources);
-        let at = Vec3::new(2.5, 64.0, 2.5);
+        let at = Vec3::new(16.5, 64.0, 2.5);
         let mut player = PlayerMotion::new(game.motion, at).unwrap();
         player.random.set_seed(0);
         game.player = Some(player);
         game.tick_experience(); // Empty lists consume no draw.
-        game.orbs.push(ExperienceOrb::new(11, at, Vec3::ZERO, 1));
-        let mut picked = ExperienceOrb::new(12, at, Vec3::ZERO, 7);
+        let mut picked =
+            ExperienceOrb::new(12, Vec3::new(15.75, 64.0, 2.5), Vec3::new(0.5, 0.0, 0.0), 7);
+        picked.no_gravity = true;
         let index = Arc::new(Mutex::new(AttachmentIndex::default()));
         let mut attachments = Attachments::default();
         VALUE.set(&mut attachments, Holder::Level, 1).unwrap();
@@ -1147,9 +1155,20 @@ mod orb_pickup_tests {
         let key = ("test".into(), "orb_pickup".into());
         assert_eq!(index.lock().unwrap().snapshot(&key).len(), 1);
         game.orbs.push(picked);
+        let mut waiting = ExperienceOrb::new(11, at, Vec3::ZERO, 1);
+        waiting.no_gravity = true;
+        game.orbs.push(waiting);
 
-        // Seed 0: nextInt(2) picks index 1, then nextInt(1) consumes a draw
-        // during the cooldown and again when the last orb is taken.
+        // Orb 12 joined first and now enters the section where orb 11 already waits.
+        game.load_ticking_neighbourhood(1, 0);
+        game.tickets.update(None);
+        game.begin_ordered_ticks();
+        game.run_ordered_ticks(horizon_client::join_seq::JoinSeq::MAX, false)
+            .unwrap();
+        assert!(game.orbs[0].position.x >= 16.0);
+
+        // Seed 0 selects the newly arrived orb at index 1. The cooldown tick
+        // and the last pickup each consume a nextInt(1) draw.
         for (total, remaining) in [(7, 1), (7, 1), (8, 0)] {
             game.tick_experience();
             assert_eq!(game.experience.total, total);
