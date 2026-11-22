@@ -7,15 +7,17 @@ use horizon_world::{
     living_fluid::{LivingFluidWorld, TravelFluidTag},
 };
 impl MotionWorld<'_, '_, '_> {
-    pub(super) fn environment_hurt(&mut self, source: &str, damage: f32) -> Result<()> {
+    /// Returns whether the hit landed: `Entity.lavaHurt` only broadcasts its
+    /// burn sound after a successful `hurtServer`.
+    pub(super) fn environment_hurt(&mut self, source: &str, damage: f32) -> Result<bool> {
         if self.player.invulnerable || self.player.spectator {
-            return Ok(());
+            return Ok(false);
         }
         // Frost walker's `damage_immunity`: #burn_from_stepping (magma, campfire).
         if self.player.burn_from_stepping_immune
             && matches!(source, "minecraft:hot_floor" | "minecraft:campfire")
         {
-            return Ok(());
+            return Ok(false);
         }
         let id = self
             .health
@@ -23,7 +25,7 @@ impl MotionWorld<'_, '_, '_> {
             .id(source)
             .ok_or("missing environment damage type")?;
         let rules = self.scene.health_rules;
-        self.player.hurt(
+        let hurt = self.player.hurt(
             &mut crate::health::DamageLevel::of(
                 self.scene,
                 self.assets.registry,
@@ -36,7 +38,7 @@ impl MotionWorld<'_, '_, '_> {
             id,
             damage,
         )?;
-        Ok(())
+        Ok(hurt)
     }
     pub(super) fn tick_remaining_fire(&mut self) -> Result<()> {
         if self.player.spectator {
@@ -136,7 +138,12 @@ impl MotionWorld<'_, '_, '_> {
         }
         if self.player.is_in_lava() {
             self.player.ignite_for_ticks(300)?;
-            self.environment_hurt("minecraft:lava", 4.0)?;
+            if self.environment_hurt("minecraft:lava", 4.0)? {
+                // Entity.lavaHurt: GENERIC_BURN at 0.4 and
+                // 2.0 + random.nextFloat() * 0.4.
+                let pitch = 2.0 + self.scene.random.next_float() * 0.4;
+                self.player.events.push(MotionEvent::LavaBurn { pitch });
+            }
         }
         Ok(())
     }

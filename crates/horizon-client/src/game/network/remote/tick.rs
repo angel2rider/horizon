@@ -432,6 +432,9 @@ impl Game<'_> {
                         [velocity.x, velocity.y, velocity.z],
                     );
                 }
+                horizon_client::motion::MotionEvent::LavaBurn { pitch } => {
+                    self.play_client_player_sound("minecraft:entity.generic.burn", 0.4, pitch);
+                }
                 horizon_client::motion::MotionEvent::Chime { volume, pitch } => {
                     self.play_client_player_sound(
                         "minecraft:block.amethyst_block.chime",

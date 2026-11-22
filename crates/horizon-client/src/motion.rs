@@ -263,6 +263,8 @@ pub enum MotionEvent {
     Health(crate::health::HealthEvent),
     /// `LivingEntity.handleDamageEvent`: the hurt sound the player hears.
     HurtSound(&'static str),
+    /// `Entity.lavaHurt`'s broadcast GENERIC_BURN after a landed lava hit.
+    LavaBurn { pitch: f32 },
     Fall(crate::landing::FallEvent),
     Recorded {
         mover: MoverType,
@@ -2254,7 +2256,11 @@ impl MotionWorld<'_, '_, '_> {
     fn lava_cauldron_inside(&mut self) -> Result<()> {
         self.player.ticks_frozen = 0;
         self.player.ignite_for_ticks(300)?;
-        self.environment_hurt("minecraft:lava", 4.0)
+        if self.environment_hurt("minecraft:lava", 4.0)? {
+            let pitch = 2.0 + self.scene.random.next_float() * 0.4;
+            self.player.events.push(MotionEvent::LavaBurn { pitch });
+        }
+        Ok(())
     }
     /// `LayeredCauldronBlock.entityInside`: on a server, a burning player
     /// asks for the cauldron's `handleEntityOnFireInside` (runBefore
