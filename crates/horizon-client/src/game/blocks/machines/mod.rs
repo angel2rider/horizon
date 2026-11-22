@@ -26,7 +26,7 @@ use horizon_client::{
     world::World,
 };
 use horizon_core::{
-    geometry::{Aabb, Direction, Vec3},
+    geometry::{Aabb, Direction, Vec3, sweep_intersected_blocks},
     position::BlockPos,
     random::RandomSource,
 };
@@ -1193,7 +1193,7 @@ impl Game<'_> {
     /// own tick counts its cooldown down.
     pub(super) fn hoppers_catch_items(&mut self) {
         let mut i = 0;
-        'items: while i < self.dropped.len() {
+        while i < self.dropped.len() {
             let item = &self.dropped[i];
             // `ItemEntity.tick` moves 1 of 4 ticks while resting;
             // `checkInsideBlocks` only follows a move.
@@ -1203,35 +1203,46 @@ impl Game<'_> {
                 i += 1;
                 continue;
             }
-            let b = item.bounds();
-            let (lo, hi) = (b.min_position(), b.max_position());
-            for x in lo.x.floor() as i32..=hi.x.floor() as i32 {
-                for y in lo.y.floor() as i32..=hi.y.floor() as i32 {
-                    for z in lo.z.floor() as i32..=hi.z.floor() as i32 {
-                        let state = self.world.block(x, y, z);
-                        if horizon_client::block_entity_types::factory_block(
-                            &self.res.facts().get(state).name,
-                        ) != "minecraft:hopper"
-                        {
-                            continue;
-                        }
-                        // Hopper.SUCK_AABB: the full-width column, 11/16 up
-                        // to two blocks high (`Block.column(16, 11, 32)`).
-                        let (fx, fy, fz) = (f64::from(x), f64::from(y), f64::from(z));
-                        if lo.x < fx + 1.0
-                            && hi.x > fx
-                            && lo.y < fy + 2.0
-                            && hi.y > fy + 11.0 / 16.0
-                            && lo.z < fz + 1.0
-                            && hi.z > fz
-                            && self.hopper_take_item((x, y, z), i)
-                        {
-                            continue 'items; // the next item now occupies this index
-                        }
-                    }
+            let bounds = item.bounds();
+            let (from, to) = (item.previous, item.position);
+            let epsilon = f64::from(1.0e-5_f32);
+            let deflated = bounds.deflate(Vec3::new(epsilon, epsilon, epsilon));
+            // The final-box retry shares the sweep's visited hoppers.
+            let mut tried = Vec::new();
+            let mut visit = |pos: BlockPos| {
+                let state = self.world.block(pos.x, pos.y, pos.z);
+                // Hopper.SUCK_AABB is tested against the item's actual box,
+                // while the block visitor uses the deflated movement box.
+                let suction = Aabb::new(Vec3::new(0.0, 11.0 / 16.0, 0.0), Vec3::new(1.0, 2.0, 1.0))
+                    .move_by(Vec3::from_block(pos));
+                if horizon_client::block_entity_types::factory_block(
+                    &self.res.facts().get(state).name,
+                ) == "minecraft:hopper"
+                    && bounds.intersects(suction)
+                    && !tried.contains(&pos)
+                {
+                    tried.push(pos);
+                    return !self.hopper_take_item((pos.x, pos.y, pos.z), i);
                 }
+                true
+            };
+            // Follow the stored move, as the item's shared block-contact path
+            // does. Vanilla rechecks the final box if its 16 steps run out.
+            let step_budget = 16;
+            let mut last_step = 0;
+            let completed = sweep_intersected_blocks(from, to, deflated, 1_000_000, |pos, step| {
+                last_step = step;
+                step < step_budget && visit(pos)
+            });
+            let still_dropped = match completed {
+                Ok(false) if last_step < step_budget => false,
+                Ok(_) if last_step + 1 >= step_budget => BlockPos::between_closed_box(deflated)
+                    .map_or(true, |mut positions| positions.all(visit)),
+                _ => true,
+            };
+            if still_dropped {
+                i += 1;
             }
-            i += 1;
         }
     }
     /// `tryMoveItems(…, () -> addItem(hopper, itemEntity))`; true when the
@@ -2284,10 +2295,9 @@ mod brewing_fuel_transfer_tests {
             game.world.set(x, y + 1, z, stone).unwrap();
             game.hoppers
                 .insert((x, y, z), super::HopperState::default());
-            game.world.block_entities.insert(
-                (x, y, z),
-                BlockEntity::Chest(vec![None; 5]),
-            );
+            game.world
+                .block_entities
+                .insert((x, y, z), BlockEntity::Chest(vec![None; 5]));
             let mut item = ItemEntity::new(
                 2,
                 ItemStack::new("minecraft:stone", 1),
@@ -2305,19 +2315,33 @@ mod brewing_fuel_transfer_tests {
     #[test]
     #[ignore = "daily"]
     fn an_enabled_hopper_catches_an_item_overlapping_a_disabled_hopper() {
+        check_adjacent_hopper_pickup(false, 8.93);
+    }
+
+    #[test]
+    #[ignore = "daily"]
+    fn a_westbound_item_between_hoppers_goes_into_the_east_hopper() {
+        check_adjacent_hopper_pickup(true, 9.05);
+    }
+
+    fn check_adjacent_hopper_pickup(west_enabled: bool, previous_x: f64) {
         with_game(|game| {
             game.world
                 .chunks
                 .insert((0, 0), Arc::new(horizon_client::chunk::Chunk::empty(0, 0)));
-            let disabled_pos = (8, 64, 8);
-            let enabled_pos = (9, 64, 8);
+            let west = (8, 64, 8);
+            let east = (9, 64, 8);
             let registry = &game.pack.assets.registry;
             let enabled = registry.default_state("minecraft:hopper").unwrap();
-            let mut disabled = registry.state(enabled).unwrap().clone();
-            disabled.properties.insert("enabled".into(), "false".into());
-            let disabled = registry.id(&disabled).unwrap();
+            let west_state = if west_enabled {
+                enabled
+            } else {
+                let mut disabled = registry.state(enabled).unwrap().clone();
+                disabled.properties.insert("enabled".into(), "false".into());
+                registry.id(&disabled).unwrap()
+            };
             let stone = registry.default_state("minecraft:stone").unwrap();
-            for ((x, y, z), state) in [(disabled_pos, disabled), (enabled_pos, enabled)] {
+            for ((x, y, z), state) in [(west, west_state), (east, enabled)] {
                 game.world.set(x, y, z, state).unwrap();
                 game.world.set(x, y + 1, z, stone).unwrap();
                 game.hoppers.insert((x, y, z), HopperState::default());
@@ -2325,23 +2349,23 @@ mod brewing_fuel_transfer_tests {
                     .block_entities
                     .insert((x, y, z), BlockEntity::Chest(vec![None; HOPPER_SLOTS]));
             }
-            // The item spans x=8.925..9.175, overlapping both pickup boxes.
+            // The item overlaps both pickup boxes and reaches into the west hopper's old bowl.
             let mut item = ItemEntity::new(
                 2,
                 ItemStack::new("minecraft:stone", 1),
-                Vec3::new(9.05, 64.7, 8.5),
+                Vec3::new(8.95, 64.7, 8.5),
                 Vec3::ZERO,
                 0.0,
             );
-            item.previous = Vec3::new(9.0, 64.7, 8.5);
+            item.previous = Vec3::new(previous_x, 64.7, 8.5);
             game.dropped.push(item);
             game.hoppers_catch_items();
 
             assert!(game.dropped.is_empty());
             let containers = game.containers();
-            let stayed_empty = containers.view(disabled_pos, false).unwrap();
+            let stayed_empty = containers.view(west, false).unwrap();
             assert!(containers.is_empty(&stayed_empty));
-            let collected = containers.view(enabled_pos, false).unwrap();
+            let collected = containers.view(east, false).unwrap();
             let stack = containers.get(&collected, 0).unwrap();
             assert_eq!(stack.item.as_ref(), "minecraft:stone");
             assert_eq!(stack.count, 1);
