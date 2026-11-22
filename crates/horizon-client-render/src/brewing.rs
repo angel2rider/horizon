@@ -288,15 +288,12 @@ impl Brewing {
             if v["type"] != "minecraft:brewing" {
                 continue;
             }
-            let mut output = ItemStack::new(
-                v["output"]["id"].as_str().unwrap_or("minecraft:potion"),
-                v["output"]["count"].as_u64().unwrap_or(1) as u32,
-            );
-            if let Some(potion) =
-                v["output"]["components"]["minecraft:potion_contents"]["potion"].as_str()
-            {
-                output = output.with_potion(potion);
-            }
+            // BrewingRecipe.output is an ItemStackTemplate: decode the whole
+            // stack, not just its potion id, so custom_name, custom_effects
+            // and component removals from a data pack survive the brew.
+            let output = horizon_client_core::scoreboard::json_to_tag(&v["output"])
+                .and_then(|tag| crate::item_data::template_from(&tag))
+                .unwrap_or_else(|| ItemStack::new("minecraft:potion", 1));
             recipes.push(BrewingRecipe {
                 id,
                 input: PotionIngredient::parse(&v["input"], items),

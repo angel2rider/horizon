@@ -1339,7 +1339,7 @@ pub fn all_bricks(sides: &[Option<ItemStack>; 4]) -> bool {
             .is_some_and(|s| &*s.item == "minecraft:brick" && s.count == 1 && s.extra.is_none())
     })
 }
-fn template_from(tag: &Tag) -> Option<ItemStack> {
+pub fn template_from(tag: &Tag) -> Option<ItemStack> {
     match tag {
         Tag::String(id) => Some(ItemStack::new(&id.to_string_lossy(), 1)),
         _ => {
