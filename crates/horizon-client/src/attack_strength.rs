@@ -189,7 +189,10 @@ mod tests {
     }
     #[test]
     fn legacy_cut_is_opt_in_and_only_for_a_damaging_sprint_hit() {
-        assert!(!legacy_pvp_hit_cuts_speed(false, CLIENT_DAMAGE, true), "off by default");
+        assert!(
+            !legacy_pvp_hit_cuts_speed(false, CLIENT_DAMAGE, true),
+            "off by default"
+        );
         assert!(legacy_pvp_hit_cuts_speed(true, CLIENT_DAMAGE, true));
         assert!(!legacy_pvp_hit_cuts_speed(true, 0.0, true));
         assert!(!legacy_pvp_hit_cuts_speed(true, CLIENT_DAMAGE, false));
