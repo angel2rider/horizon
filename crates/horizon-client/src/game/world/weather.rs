@@ -4,6 +4,29 @@
 use super::*;
 
 impl Game<'_> {
+    /// `Entity.applyEffectsFromBlocks`: rain puts out a burning entity. The
+    /// server copy owns this; the window follows its synced fire flag.
+    pub(super) fn extinguish_player_in_rain(&mut self) {
+        let Some(p) = self.player.as_ref() else {
+            return;
+        };
+        if p.fire_ticks <= 0 {
+            return;
+        }
+        let at = p.position;
+        let top = p.bounds().max_position().y;
+        if self.weather_levels(1.0).0 > 0.2 && self.in_rain(at, top) {
+            if let Some(p) = self.player.as_mut() {
+                p.fire_ticks = 0;
+            }
+            self.audio.play(
+                "minecraft:entity.generic.extinguish_fire",
+                Some([at.x, at.y, at.z]),
+                1.0,
+                1.0,
+            );
+        }
+    }
     /// `Level.isDarkOutside`.
     pub(super) fn dark_outside(&self) -> bool {
         !self.dimension_type().has_fixed_time && self.sky_darken() >= 4

@@ -366,6 +366,7 @@ impl Game<'_> {
             player.fire_ticks,
             self.remote.as_ref().is_some_and(|r| r.own_on_fire),
         );
+        self.extinguish_player_in_rain();
         // LocalPlayer.onUpdateAbilities: flight turned on or off (a double
         // jump, a spectator, landing) is sent to the server.
         let flying = player.flying;

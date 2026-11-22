@@ -252,6 +252,7 @@ impl Game<'_> {
             let _ = w.server_block_damage(start);
             let _ = w.update_soul_speed_block();
             let _ = w.tick_environment_damage();
+            game.extinguish_player_in_rain();
             let _ = w.apply_fire_contact();
             let _ = w.server_hazards_tick(in_wall);
             // LivingEntity.aiStep: a Riptide spin counts down on the server's
