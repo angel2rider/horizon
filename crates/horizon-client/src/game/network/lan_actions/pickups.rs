@@ -261,7 +261,7 @@ impl Game<'_> {
         if let Some(cooldown) = cooldown {
             self.native_player_exp_cooldown_change(player, &name, cooldown);
         }
-        if unable || delayed {
+        if unable {
             return;
         }
         let area = match vehicle.and_then(|v| self.guest_target_box(gi, v as i32)) {
@@ -297,14 +297,27 @@ impl Game<'_> {
         if touching.is_empty() {
             return;
         }
-        // Util.getRandom(orbs, random).
+        // Player.aiStep draws before ExperienceOrb.playerTouch checks the cooldown.
+        let pick =
+            |player: &mut PlayerMotion| player.random.next_int_bound(touching.len() as i32).ok();
         let pick = self
-            .world
-            .random
-            .next_int_bound(touching.len() as i32)
-            .unwrap_or(0) as usize;
+            .lan
+            .as_mut()
+            .and_then(|host| {
+                host.hub
+                    .update_guest(conn, |g| g.motion.as_deref_mut().and_then(pick))
+                    .flatten()
+            })
+            .or_else(|| {
+                // A guest whose body has yet to be initialized gets it on their first turn.
+                self.as_guest(conn, |game| game.player.as_mut().and_then(pick))
+                    .flatten()
+            });
+        let Some(pick) = pick.filter(|_| !delayed) else {
+            return;
+        };
         // A merged orb gives its value once per count and goes at zero.
-        let index = touching[pick];
+        let index = touching[pick as usize];
         let mut orb = self.orbs[index].clone();
         let mut canceled = false;
         // Swapping the guest in costs: only when a mod hears the pickup.

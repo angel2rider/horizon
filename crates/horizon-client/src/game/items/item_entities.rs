@@ -626,9 +626,10 @@ impl Game<'_> {
         let mut orbs = self.orbs.lift();
         #[cfg(test)]
         crate::game::entity::taken_pass_tests::after_take(self);
-        let mut gained = 0;
-        let mut taken = Vec::new();
-        if let Some((min, max)) = bounds {
+        let mut taken = None;
+        if let Some((min, max)) = bounds
+            && let Some(player) = self.player.as_mut()
+        {
             let touching = |o: &horizon_client::entities::ExperienceOrb| {
                 o.position.x + 0.25 > min[0]
                     && o.position.x - 0.25 < max[0]
@@ -637,42 +638,37 @@ impl Game<'_> {
                     && o.position.z + 0.25 > min[2]
                     && o.position.z - 0.25 < max[2]
             };
-            // Player.aiStep: Util.getRandom(orbs, this.random) — one of the
-            // orbs in range, picked from the player's own random, not the
-            // first one in join order.
-            let pick = if self.xp_delay == 0 {
-                let count = orbs.iter().filter(|o| touching(o)).count();
-                if count > 0 {
-                    random_source::entity().next_int_bound(count as i32).unwrap_or(0) as usize
-                } else {
-                    0
-                }
-            } else {
-                0
-            };
-            let mut seen = 0;
-            orbs.retain_mut(|o| {
-                if touching(o) && self.xp_delay == 0 {
-                    if seen == pick {
-                        // ExperienceOrb.playerTouch: one orb every 2 ticks; a
-                        // merged orb gives its value once per count.
-                        self.xp_delay = 2;
-                        gained += o.points();
-                        taken.push(o.clone());
-                        o.count -= 1;
-                        return o.count > 0;
+            // Player.aiStep draws before ExperienceOrb.playerTouch checks the cooldown.
+            let count = orbs.iter().filter(|o| touching(o)).count();
+            if count > 0
+                && let Ok(pick) = player.random.next_int_bound(count as i32)
+                && self.xp_delay == 0
+            {
+                let index = orbs
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, orb)| touching(orb))
+                    .nth(pick as usize)
+                    .map(|(index, _)| index);
+                if let Some(index) = index {
+                    self.xp_delay = 2;
+                    // A merged orb gives its value once per count.
+                    if orbs[index].count <= 1 {
+                        taken = Some(orbs.remove(index));
+                    } else {
+                        taken = Some(orbs[index].clone());
+                        orbs.update(index, |orb| orb.count -= 1);
                     }
-                    seen += 1;
                 }
-                true
-            });
+            }
         }
         self.orbs
             .restore(orbs, horizon_client::join_seq::RestoreOrder::SurvivorsFirst);
-        if gained > 0 {
-            gained = self.mending(gained);
-        }
-        for o in taken {
+        if let Some(o) = taken {
+            let mut gained = o.points();
+            if gained > 0 {
+                gained = self.mending(gained);
+            }
             // ClientPacketListener.handleTakeItemEntity: every orb taken sounds
             // at the orb, whether mending took its points or not.
             let mut r = random_source::create();
@@ -688,9 +684,9 @@ impl Game<'_> {
                 crate::game::pickups::Taken::Orb(Box::new(o)),
                 crate::game::pickups::Collector::Player,
             );
-        }
-        if gained > 0 {
-            self.give_experience_points(gained as i32);
+            if gained > 0 {
+                self.give_experience_points(gained as i32);
+            }
         }
     }
 
@@ -1122,33 +1118,34 @@ mod bob_tests {
 
 #[cfg(test)]
 mod orb_pickup_tests {
-    use super::*;
     use crate::game::game_tests::tests::server_game;
     use crate::motion::PlayerMotion;
     use horizon_client::entities::ExperienceOrb;
-    use horizon_core::geometry::Vec3;
+    use horizon_core::{geometry::Vec3, random::RandomSource};
 
-    /// `Player.aiStep` picks `Util.getRandom(orbs, this.random)`, not the
-    /// first orb in the list. With two different values in range, repeated
-    /// pickups must yield both.
     #[test]
     #[ignore = "daily"]
     fn a_player_picks_a_random_orb_not_the_first() {
         let mut resources = None;
         let mut game = server_game(&mut resources);
         let at = Vec3::new(2.5, 64.0, 2.5);
-        game.player = Some(PlayerMotion::new(game.motion, at).unwrap());
-        let mut seen = std::collections::HashSet::new();
-        for _ in 0..40 {
-            game.orbs.clear();
-            game.orbs.push(ExperienceOrb::new(11, at, Vec3::ZERO, 1));
-            game.orbs.push(ExperienceOrb::new(12, at, Vec3::ZERO, 7));
-            game.xp_delay = 0;
-            let before = game.experience.total;
+        let mut player = PlayerMotion::new(game.motion, at).unwrap();
+        player.random.set_seed(0);
+        game.player = Some(player);
+        game.tick_experience(); // Empty lists consume no draw.
+        game.orbs.push(ExperienceOrb::new(11, at, Vec3::ZERO, 1));
+        game.orbs.push(ExperienceOrb::new(12, at, Vec3::ZERO, 7));
+
+        // Seed 0: nextInt(2) picks index 1, then nextInt(1) consumes a draw
+        // during the cooldown and again when the last orb is taken.
+        for (total, remaining) in [(7, 1), (7, 1), (8, 0)] {
             game.tick_experience();
-            seen.insert(game.experience.total - before);
+            assert_eq!(game.experience.total, total);
+            assert_eq!(game.orbs.len(), remaining);
         }
-        assert!(seen.contains(&1), "the 1-point orb was never picked");
-        assert!(seen.contains(&7), "the 7-point orb was never picked");
+        assert_eq!(
+            game.player.as_mut().unwrap().random.next_int(),
+            -1_690_734_402
+        );
     }
 }

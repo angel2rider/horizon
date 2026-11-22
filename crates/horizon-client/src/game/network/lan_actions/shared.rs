@@ -2340,7 +2340,37 @@ mod pickup_xp_tests {
     use super::super::native_entity_refs::tests::with_game;
     use super::super::native_item_places::tests::{guest, open_to_lan};
     use horizon_client::entities::ExperienceOrb;
-    use horizon_core::geometry::Vec3;
+    use horizon_core::{geometry::Vec3, random::RandomSource};
+
+    #[test]
+    #[ignore = "daily"]
+    fn a_guest_picks_an_orb_with_their_own_random() {
+        with_game(|game| {
+            open_to_lan(game);
+            let mut g = guest(1);
+            g.loaded = true;
+            g.position = [0.5, 70.0, 0.5];
+            game.lan.as_mut().unwrap().hub.guests.push(g);
+            game.as_guest(1, |game| game.player.as_mut().unwrap().random.set_seed(0))
+                .unwrap();
+
+            let at = Vec3::new(0.5, 70.0, 0.5);
+            game.orbs.push(ExperienceOrb::new(40, at, Vec3::ZERO, 1));
+            game.orbs.push(ExperienceOrb::new(41, at, Vec3::ZERO, 7));
+            game.guest_orbs(0);
+            game.guest_orbs(0);
+
+            let guest = &game.lan.as_ref().unwrap().hub.guests[0];
+            assert_eq!(guest.xp_total, 7);
+            assert_eq!(game.orbs.len(), 1);
+            assert_eq!(game.orbs[0].id, 40);
+            // Seed 0 after nextInt(2) and the cooldown tick's nextInt(1).
+            assert_eq!(
+                guest.motion.as_ref().unwrap().random.clone().next_int(),
+                1_033_096_058
+            );
+        });
+    }
 
     /// Listens to `pickup_xp`, canceling it when told to.
     struct Listen(bool);
