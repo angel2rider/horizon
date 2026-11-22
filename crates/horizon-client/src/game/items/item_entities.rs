@@ -48,6 +48,22 @@ pub(super) fn bob_offset(position: Vec3, drawn: f32, still: bool) -> f32 {
     drawn * std::f32::consts::PI * 2.0
 }
 
+/// `Player.aiStep` sees the level's section order. A stable sort keeps the
+/// orb list order within each section.
+pub(super) fn touching_orbs(
+    orbs: &horizon_client::join_seq::JoinList<ExperienceOrb>,
+    area: Aabb,
+) -> Vec<usize> {
+    let mut touching: Vec<_> = orbs
+        .iter()
+        .enumerate()
+        .filter(|(_, orb)| orb.bounds().intersects(area))
+        .map(|(index, _)| index)
+        .collect();
+    touching.sort_by_key(|&index| super::entity_sections::section_order(orbs[index].position));
+    touching
+}
+
 impl Game<'_> {
     pub(super) fn tick_items(&mut self) {
         let mut round = self.item_update_round();
@@ -606,59 +622,33 @@ impl Game<'_> {
                     p.position.z + w,
                 ),
             );
-            let area = match self.riding_box() {
+            match self.riding_box() {
                 Some(vehicle) => own.union_bounds(vehicle).inflate(Vec3::new(1.0, 0.0, 1.0)),
                 None => own.inflate(Vec3::new(1.0, 0.5, 1.0)),
-            };
-            (
-                [
-                    area.min_position().x,
-                    area.min_position().y,
-                    area.min_position().z,
-                ],
-                [
-                    area.max_position().x,
-                    area.max_position().y,
-                    area.max_position().z,
-                ],
-            )
+            }
         });
         let mut orbs = self.orbs.lift();
         #[cfg(test)]
         crate::game::entity::taken_pass_tests::after_take(self);
         let mut taken = None;
-        if let Some((min, max)) = bounds
+        if let Some(area) = bounds
             && let Some(player) = self.player.as_mut()
         {
-            let touching = |o: &horizon_client::entities::ExperienceOrb| {
-                o.position.x + 0.25 > min[0]
-                    && o.position.x - 0.25 < max[0]
-                    && o.position.y + 0.5 > min[1]
-                    && o.position.y < max[1]
-                    && o.position.z + 0.25 > min[2]
-                    && o.position.z - 0.25 < max[2]
-            };
+            let touching = touching_orbs(&orbs, area);
             // Player.aiStep draws before ExperienceOrb.playerTouch checks the cooldown.
-            let count = orbs.iter().filter(|o| touching(o)).count();
-            if count > 0
-                && let Ok(pick) = player.random.next_int_bound(count as i32)
+            if !touching.is_empty()
+                && let Ok(pick) = player.random.next_int_bound(touching.len() as i32)
                 && self.xp_delay == 0
             {
-                let index = orbs
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, orb)| touching(orb))
-                    .nth(pick as usize)
-                    .map(|(index, _)| index);
-                if let Some(index) = index {
-                    self.xp_delay = 2;
-                    // A merged orb gives its value once per count.
-                    if orbs[index].count <= 1 {
-                        taken = Some(orbs.remove(index));
-                    } else {
-                        taken = Some(orbs[index].clone());
-                        orbs.update(index, |orb| orb.count -= 1);
-                    }
+                let index = touching[pick as usize];
+                self.xp_delay = 2;
+                // The particle uses a detached snapshot so a removed orb's attachments retire now.
+                taken = Some(orbs[index].clone());
+                // A merged orb gives its value once per count.
+                if orbs[index].count <= 1 {
+                    drop(orbs.remove(index));
+                } else {
+                    orbs.update(index, |orb| orb.count -= 1);
                 }
             }
         }
@@ -1122,10 +1112,23 @@ mod orb_pickup_tests {
     use crate::motion::PlayerMotion;
     use horizon_client::entities::ExperienceOrb;
     use horizon_core::{geometry::Vec3, random::RandomSource};
+    use horizon_mod_runtime::attachments::{
+        AttachmentType, Attachments, Holder, index::AttachmentIndex,
+    };
+    use std::sync::{Arc, Mutex};
 
     #[test]
     #[ignore = "daily"]
     fn a_player_picks_a_random_orb_not_the_first() {
+        static VALUE: AttachmentType<i32> = AttachmentType {
+            namespace: "test",
+            name: "orb_pickup",
+            default: || 0,
+            codec: None,
+            copy_on_death: false,
+            sync: false,
+        };
+
         let mut resources = None;
         let mut game = server_game(&mut resources);
         let at = Vec3::new(2.5, 64.0, 2.5);
@@ -1134,7 +1137,16 @@ mod orb_pickup_tests {
         game.player = Some(player);
         game.tick_experience(); // Empty lists consume no draw.
         game.orbs.push(ExperienceOrb::new(11, at, Vec3::ZERO, 1));
-        game.orbs.push(ExperienceOrb::new(12, at, Vec3::ZERO, 7));
+        let mut picked = ExperienceOrb::new(12, at, Vec3::ZERO, 7);
+        let index = Arc::new(Mutex::new(AttachmentIndex::default()));
+        let mut attachments = Attachments::default();
+        VALUE.set(&mut attachments, Holder::Level, 1).unwrap();
+        picked
+            .attachment_lifetime
+            .bind(&mut attachments, &index, picked.id);
+        let key = ("test".into(), "orb_pickup".into());
+        assert_eq!(index.lock().unwrap().snapshot(&key).len(), 1);
+        game.orbs.push(picked);
 
         // Seed 0: nextInt(2) picks index 1, then nextInt(1) consumes a draw
         // during the cooldown and again when the last orb is taken.
@@ -1142,7 +1154,9 @@ mod orb_pickup_tests {
             game.tick_experience();
             assert_eq!(game.experience.total, total);
             assert_eq!(game.orbs.len(), remaining);
+            assert!(index.lock().unwrap().snapshot(&key).is_empty());
         }
+        assert_eq!(game.pickups.made().get("orb"), Some(&2));
         assert_eq!(
             game.player.as_mut().unwrap().random.next_int(),
             -1_690_734_402

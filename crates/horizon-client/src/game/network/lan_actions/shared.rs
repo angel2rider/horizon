@@ -2349,14 +2349,16 @@ mod pickup_xp_tests {
             open_to_lan(game);
             let mut g = guest(1);
             g.loaded = true;
-            g.position = [0.5, 70.0, 0.5];
+            g.position = [16.0, 70.0, 0.5];
             game.lan.as_mut().unwrap().hub.guests.push(g);
             game.as_guest(1, |game| game.player.as_mut().unwrap().random.set_seed(0))
                 .unwrap();
 
-            let at = Vec3::new(0.5, 70.0, 0.5);
-            game.orbs.push(ExperienceOrb::new(40, at, Vec3::ZERO, 1));
-            game.orbs.push(ExperienceOrb::new(41, at, Vec3::ZERO, 7));
+            // Section 0 comes before section 1 even though its orb joined second.
+            let right = Vec3::new(16.5, 70.0, 0.5);
+            let left = Vec3::new(15.5, 70.0, 0.5);
+            game.orbs.push(ExperienceOrb::new(41, right, Vec3::ZERO, 7));
+            game.orbs.push(ExperienceOrb::new(40, left, Vec3::ZERO, 1));
             game.guest_orbs(0);
             game.guest_orbs(0);
 

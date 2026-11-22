@@ -28,6 +28,7 @@ pub(super) mod observer_cache;
 
 use super::Game;
 use crate::mobs::living::section_writes::PositionWrite;
+use horizon_core::geometry::Vec3;
 use mod_api::__private::game::BackendRefOf;
 use mod_api::{DimensionKey, EntityRef, WorldEpoch};
 use std::collections::HashMap;
@@ -51,6 +52,14 @@ fn section_coord(v: f64) -> i32 {
 
 fn section_of([x, y, z]: [f64; 3]) -> [i32; 3] {
     [section_coord(x), section_coord(y), section_coord(z)]
+}
+
+/// `EntitySectionStorage.forEachAccessibleNonEmptySection` walks signed X first.
+/// Within each X it walks the packed `SectionPos` bits, unsigned Z then unsigned Y.
+pub(super) fn section_order(at: Vec3) -> (i32, u32, u32) {
+    let s = |v: f64| (v.floor() as i32) >> 4;
+    let (x, y, z) = (s(at.x), s(at.y), s(at.z));
+    (x, z as u32 & 0x3F_FFFF, y as u32 & 0xF_FFFF)
 }
 
 /// A section change a boundary found: the entity, its old and its new section.

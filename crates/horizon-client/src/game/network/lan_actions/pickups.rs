@@ -268,32 +268,7 @@ impl Game<'_> {
             Some(vehicle) => own.union_bounds(vehicle).inflate(Vec3::new(1.0, 0.0, 1.0)),
             None => own.inflate(Vec3::new(1.0, 0.5, 1.0)),
         };
-        let (min, max) = (
-            [
-                area.min_position().x,
-                area.min_position().y,
-                area.min_position().z,
-            ],
-            [
-                area.max_position().x,
-                area.max_position().y,
-                area.max_position().z,
-            ],
-        );
-        let touching: Vec<usize> = self
-            .orbs
-            .iter()
-            .enumerate()
-            .filter(|(_, o)| {
-                o.position.x + 0.25 > min[0]
-                    && o.position.x - 0.25 < max[0]
-                    && o.position.y + 0.5 > min[1]
-                    && o.position.y < max[1]
-                    && o.position.z + 0.25 > min[2]
-                    && o.position.z - 0.25 < max[2]
-            })
-            .map(|(i, _)| i)
-            .collect();
+        let touching = crate::game::item_entities::touching_orbs(&self.orbs, area);
         if touching.is_empty() {
             return;
         }
