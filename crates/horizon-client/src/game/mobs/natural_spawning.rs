@@ -1392,6 +1392,16 @@ impl<'a> Game<'a> {
                 players.retain(|p| !fake.contains(&p.uuid));
             }
         }
+        // ChunkMap.skipPlayer: with spectatorsGenerateChunks false a
+        // spectator is not added to the distance manager, so its chunks
+        // never enlarge the natural-spawn chunk count the caps divide by.
+        if !self
+            .ui
+            .rules
+            .bool_at(horizon_client::gamerules::vanilla::SPECTATORS_GENERATE_CHUNKS)
+        {
+            players.retain(|p| !p.spectator);
+        }
         if players.is_empty() {
             return;
         }
