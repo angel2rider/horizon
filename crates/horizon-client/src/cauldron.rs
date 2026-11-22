@@ -248,8 +248,8 @@ pub fn interact_selected<H>(
         .unwrap_or(0);
     // PotionContents.is(Potions.WATER): a water potion with custom effects
     // is not the water potion, so CauldronInteractions leaves it alone.
-    let water_potion = held.potion() == Some("minecraft:water")
-        && held.custom_potion_effects().is_empty();
+    let water_potion =
+        held.potion() == Some("minecraft:water") && held.custom_potion_effects().is_empty();
     // Dispatcher.get: tags first, then the item map.
     if matches!(entry, Some(interactions::Entry::Dye)) {
         if held.data().and_then(|d| d.dyed_color).is_none() {
