@@ -1044,6 +1044,7 @@ impl Game<'_> {
         let src = [pos[0].floor() as i32, pos[2].floor() as i32];
         if !self
             .border
+            .geometry()
             .is_within_bounds(f64::from(src[0]), f64::from(src[1]), 0.0)
         {
             return;
