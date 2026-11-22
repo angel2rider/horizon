@@ -949,6 +949,11 @@ impl Game<'_> {
         // the saved flag or window refuses the hit — past only for
         // #bypasses_invulnerability damage and a creative player's hit
         // (`DamageSource.isCreativePlayer`).
+        // ArmorStand.hurtServer refuses an invisible or marker stand before
+        // any creative break or wobble: no sound, no wobble, no drops.
+        if self.armor_stands[i].invisible || self.armor_stands[i].marker {
+            return false;
+        }
         let id = self.armor_stands[i].id;
         let attacker = self.own_entity_id();
         let vanilla = self.saved_refuses_damage(id, "minecraft:player_attack", self.creative);
