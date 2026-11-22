@@ -606,8 +606,9 @@ impl Game<'_> {
     }
     /// `ServerExplosion.hurtEntities` for item frames: a frame within the blast
     /// is killed and dropped with its item (`BlockAttachedEntity.hurtServer`).
-    /// A fixed frame is not hurt by an explosion, and `blast_spares_decorations`
-    /// keeps every frame without `mobGriefing`.
+    /// A fixed frame resists an explosion unless the blast was caused by a
+    /// creative player (`ItemFrame.canHurtWhenFixed`), and
+    /// `blast_spares_decorations` keeps every frame without `mobGriefing`.
     pub(super) fn explosion_breaks_frames(
         &mut self,
         blast: [f64; 3],
@@ -617,6 +618,11 @@ impl Game<'_> {
         if self.blast_spares_decorations(interaction) {
             return;
         }
+        // DamageSource.isCreativePlayer: a creative player's blast can hurt
+        // a fixed frame; another player's, a mob's or an ownerless one cannot.
+        let creative = self
+            .blast_attacker()
+            .is_some_and(|(id, _)| self.creative_damage_source_id(id as i32));
         let mut i = 0;
         while i < self.item_frames.len() {
             let c = center(&self.item_frames[i]);
@@ -624,11 +630,25 @@ impl Game<'_> {
                 ((c[0] - blast[0]).powi(2) + (c[1] - blast[1]).powi(2) + (c[2] - blast[2]).powi(2))
                     .sqrt()
                     / diameter;
-            if dist > 1.0
-                || self.item_frames[i].fixed
-                || !self.combat.visits(self.item_frames[i].id)
-                || !self.break_frame_by(i, self.explosion_kill_credit())
-            {
+            if dist > 1.0 || !self.combat.visits(self.item_frames[i].id) {
+                i += 1;
+                continue;
+            }
+            let gone = if self.item_frames[i].fixed {
+                if !creative {
+                    i += 1;
+                    continue;
+                }
+                // A fixed frame drops neither itself nor its item; the
+                // projectile path (`projectile_hurts_frame`) does the same.
+                self.item_frames[i].item = None;
+                let before = self.item_frames.len();
+                self.hit_frame(i, true, true);
+                self.item_frames.len() < before
+            } else {
+                self.break_frame_by(i, self.explosion_kill_credit())
+            };
+            if !gone {
                 i += 1;
             }
         }
