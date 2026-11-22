@@ -816,6 +816,8 @@ struct Offer {
     darken: bool,
     music: bool,
     fog: bool,
+    /// Kept for the offer's recorded scope; removal no longer keys on it.
+    #[allow(dead_code)]
     scope: Scope,
 }
 
