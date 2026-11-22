@@ -1543,6 +1543,19 @@ impl Game<'_> {
         );
     }
 
+    /// `VehicleEntity.destroy(level, dropItem)`: the boat's item, carrying
+    /// the vehicle's `CustomName` as `DataComponents.CUSTOM_NAME`, like
+    /// the minecart's `cart_drop`.
+    fn boat_drop(&self, id: u32, item: &str) -> ItemStack {
+        let mut stack = ItemStack::new(Arc::from(item), 1);
+        if let Some(name) = self.persist_raw(id).and_then(|raw| raw.get("CustomName")) {
+            let text = horizon_client::entity_nbt::name_text(name);
+            stack.data_mut().custom_name =
+                Some(horizon_client::scoreboard::component_tag(&text.component()));
+        }
+        stack
+    }
+
     pub(super) fn hurt_boat_result(
         &mut self,
         i: usize,
