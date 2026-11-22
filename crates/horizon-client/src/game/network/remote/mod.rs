@@ -478,6 +478,10 @@ pub(super) struct Remote {
     pub(super) professions: Arc<horizon_client::mobs::villager::ResolvedProfessions>,
     pub session: Session,
     pub brand: String,
+    /// A landed sprint hit with the opt-in 1.8 compatibility cut stops this
+    /// tick's sprint restart, so the walk speed and STOP_SPRINTING reach the
+    /// server with the hit tick's move. Cleared at the next input tick.
+    pub(super) suppress_sprint_tick: bool,
     pub(super) recipe_viewer: crate::game::recipe_book::ViewerChannels,
     /// This connection's configured feature flags, carried through reconfiguration.
     pub(super) features: std::sync::Arc<[String]>,

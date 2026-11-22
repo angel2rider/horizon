@@ -13,6 +13,8 @@ impl Game<'_> {
         let Some(r) = self.remote.as_mut() else {
             return;
         };
+        // A hit this tick may set this again through `remote_player_attack`.
+        r.suppress_sprint_tick = false;
         let mut input = r.input.take_queued();
         let stop = std::mem::take(&mut r.stop_mining);
         // Minecraft.tick runs handleKeybinds only while `gui.screen() == null`: a
@@ -112,7 +114,9 @@ impl Game<'_> {
     /// hit has no attacker side; but `RemotePlayer.hurtClient` is true, so a
     /// hit on another player with extra knockback runs the attacker's side of
     /// `causeExtraKnockback`: the 0.6 horizontal speed cut and the sprint
-    /// stop. Without it the next move outruns the server's player.
+    /// stop. Without it the next move outruns the server's player. With the opt-in
+    /// 1.8 compatibility setting, a landed sprint hit also cuts this client's speed
+    /// and keeps its sprint off for this tick's move, as the server's 1.8 rules do.
     pub(super) fn remote_player_attack_body(&mut self, mob: usize) {
         // Java dispatches this through the target's RemotePlayer type. The
         // level_players map is profile bookkeeping and can lag the entity;
@@ -154,11 +158,18 @@ impl Game<'_> {
                 mob_tracking_body(m),
             );
         }
-        if !horizon_client::attack_strength::attacker_slows_after_hit(
+        let vanilla = horizon_client::attack_strength::attacker_slows_after_hit(
             damage, knockback, strength, sprinting,
-        ) {
+        );
+        let legacy = horizon_client::attack_strength::legacy_pvp_hit_cuts_speed(
+            self.pvp_slow_on_hit(),
+            damage,
+            sprinting,
+        );
+        if !vanilla && !legacy {
             return;
         }
+        // One cut per hit, whether one or both rules asked for it.
         if let Some(p) = self.player.as_mut() {
             let slowdown = horizon_client::attack_strength::ATTACKER_SLOWDOWN;
             p.velocity = Vec3::new(
@@ -166,6 +177,9 @@ impl Game<'_> {
                 p.velocity.y,
                 p.velocity.z * slowdown,
             );
+        }
+        if legacy && let Some(r) = self.remote.as_mut() {
+            r.suppress_sprint_tick = true;
         }
         self.stop_sprint_after_extra_knockback();
     }

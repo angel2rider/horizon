@@ -231,7 +231,10 @@ impl Game<'_> {
             jump: held(Action::Jump),
             shift: held(Action::Sneak),
             sprint: held(Action::Sprint),
-            sprint_suppressed: false,
+            sprint_suppressed: self
+                .remote
+                .as_ref()
+                .is_some_and(|r| r.suppress_sprint_tick),
             analog: None,
         }
         .with_stick(stick.filter(|_| playing));
