@@ -264,7 +264,9 @@ pub enum MotionEvent {
     /// `LivingEntity.handleDamageEvent`: the hurt sound the player hears.
     HurtSound(&'static str),
     /// `Entity.lavaHurt`'s broadcast GENERIC_BURN after a landed lava hit.
-    LavaBurn { pitch: f32 },
+    LavaBurn {
+        pitch: f32,
+    },
     Fall(crate::landing::FallEvent),
     Recorded {
         mover: MoverType,
