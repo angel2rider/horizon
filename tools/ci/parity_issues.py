@@ -17,7 +17,9 @@ When more than MASS_FAILURE harnesses newly fail at once (a commit that does not
 one issue titled "Nightly audit: N harnesses newly fail" instead of one each (2026-11-06: a main commit that did not
 compile opened 421), and their previous results are kept so the next audit compares them again. When an audit has no
 mass failure, every open "Nightly audit: " issue is closed: two duplicates were open at once (#17343 and #17794, for
-the same 57 harnesses), so the audit closes all of them instead of leaving one to be closed by hand.
+the same 57 harnesses), so the audit closes all of them instead of leaving one to be closed by hand. Only an audit that
+ran to the end (--complete) and has a previous audit to compare with closes them: a first audit opens nothing, and a
+cancelled or timed-out one did not run the harnesses that still fail.
 
 The first audit only records the results. Needs the gh CLI; --dry-run prints what it would do.
 """
@@ -79,6 +81,12 @@ def mass_issue(listed):
     return min(mass_issues(listed), default=None)
 
 
+def should_close_mass(previous, complete):
+    """Whether an audit without a mass failure shows the mass failure is over: it compared against a previous audit
+    and every harness ran (a first audit opens nothing; a cancelled or timed-out one skipped harnesses)."""
+    return previous is not None and complete
+
+
 def close_mass_issues(listed, commit, run, call=None, dry_run=False):
     """Close all open mass-failure issues: with no mass failure this audit, they are all stale (#17343/#17794)."""
     call = call or gh
@@ -119,6 +127,8 @@ def gh(*arguments, dry_run=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--since", required=True, help="the audit's start (the state's local time format)")
+    parser.add_argument("--complete", action="store_true",
+                        help="the audit ran every harness (not cancelled or timed out): only then are mass issues closed")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     now = results(json.loads(STATE.read_text()), args.since)
@@ -158,8 +168,8 @@ def main():
                "--body", f"{len(mass)} harnesses passed in the previous nightly audit, or are new, and fail in the "
                f"audit of `{commit[:12]}` ({run}): usually a commit that does not build or a broken runner, so they "
                f"get this one issue instead of one each.\n\n{listing}", dry_run=args.dry_run)
-    else:
-        # No mass failure in this audit: every open mass issue is stale, so close them all (two duplicates can be
+    elif should_close_mass(previous, args.complete):
+        # No mass failure in a finished audit: every open mass issue is stale, so close them all (two duplicates can be
         # open at once, and closing only the lowest-numbered one would leave the other for a human).
         for number in close_mass_issues(listed, commit, run, dry_run=args.dry_run):
             print(f"close: #{number}, the mass failure is over")

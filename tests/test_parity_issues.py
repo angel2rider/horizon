@@ -58,6 +58,11 @@ class ParityIssuesTests(unittest.TestCase):
         self.assertEqual(issues.close_mass_issues(listed[:1], "c" * 40, "run", call=call), [])
         self.assertEqual(calls, [])
 
+    def test_mass_issues_close_only_after_a_finished_audit_with_history(self):
+        self.assertFalse(issues.should_close_mass(None, True))
+        self.assertFalse(issues.should_close_mass({"a": "fail"}, False))
+        self.assertTrue(issues.should_close_mass({"a": "fail"}, True))
+
 
 if __name__ == "__main__":
     unittest.main()
