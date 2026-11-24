@@ -18,13 +18,15 @@ pub fn set_source_volumes(volumes: [f32; 11]) {
 pub fn sound_source(event: &str) -> usize {
     let e = event.trim_start_matches("minecraft:");
     let index = |name: &str| SOUND_SOURCES.iter().position(|n| *n == name).unwrap_or(0);
-    const HOSTILE: [&str; 34] = [
+    const HOSTILE: [&str; 35] = [
         "zombie",
         "skeleton",
         "creeper",
         "spider",
         "cave_spider",
         "enderman",
+        // EnderDragon.getSoundSource: HOSTILE, so muting hostile silences it.
+        "ender_dragon",
         "witch",
         "slime",
         "magma_cube",
@@ -64,6 +66,9 @@ pub fn sound_source(event: &str) -> usize {
     } else if e == "item.bottle.empty" {
         // PotionItem / CauldronInteractions / DispenseItemBehavior: SoundSource.BLOCKS.
         index("block")
+    } else if e == "item.llama_carpet.unequip" {
+        // Equippable.shearingSound, played by Mob.playSound on the llama's NEUTRAL.
+        index("neutral")
     } else if e.starts_with("music_disc.") {
         index("record")
     } else if e.starts_with("item.goat_horn.") {
@@ -73,6 +78,9 @@ pub fn sound_source(event: &str) -> usize {
         index("music")
     } else if e.starts_with("weather.") || e.starts_with("entity.lightning_bolt") {
         index("weather")
+    } else if e.starts_with("block.note_block.") {
+        // NoteBlock.triggerEvent plays every instrument on RECORDS.
+        index("record")
     } else if e.starts_with("block.") {
         index("block")
     } else if e.starts_with("ambient.") {
@@ -974,6 +982,7 @@ mod tests {
             horizon_narrator::Status::Off
         );
     }
+
     /// `BottleItem.use` and `PotionItem` name their sounds `item.*` but play
     /// them on NEUTRAL and BLOCKS. The name-family rule alone puts both on
     /// PLAYER, so muting `soundCategory_player` would silence sounds vanilla
@@ -991,12 +1000,30 @@ mod tests {
         assert_eq!(super::sound_source("minecraft:item.book.page_turn"), 7);
     }
 
+    /// `Equippable.shearingSound` for a llama carpet is played by `Mob.playSound`
+    /// on the llama's NEUTRAL source, not on PLAYER like most `item.*` ids.
+    #[test]
+    fn llama_carpet_unequip_keeps_neutral_category() {
+        assert_eq!(
+            super::sound_source("minecraft:item.llama_carpet.unequip"),
+            6
+        );
+        assert_eq!(super::sound_source("item.llama_carpet.unequip"), 6);
+        assert_eq!(super::sound_source("minecraft:item.book.page_turn"), 7);
+    }
+
     /// `Monster.getSoundSource`: the verified families and inherited common sounds.
     #[test]
     fn hostile_families_keep_their_sound_category() {
         for (event, source) in [
             ("entity.zombie.hurt", 5),
+            ("block.note_block.harp", 2),
+            ("block.note_block.imitate.creeper", 2),
+            ("block.note_block.trumpet_exposed", 2),
             ("entity.cow.hurt", 6),
+            ("entity.ender_dragon.flap", 5),
+            ("entity.ender_dragon.growl", 5),
+            ("entity.ender_dragon.hurt", 5),
             ("block.stone.break", 4),
             ("entity.player.hurt", 7),
             ("entity.arrow.hit", 7),
