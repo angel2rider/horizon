@@ -18,7 +18,7 @@ pub fn set_source_volumes(volumes: [f32; 11]) {
 pub fn sound_source(event: &str) -> usize {
     let e = event.trim_start_matches("minecraft:");
     let index = |name: &str| SOUND_SOURCES.iter().position(|n| *n == name).unwrap_or(0);
-    const HOSTILE: [&str; 35] = [
+    const HOSTILE: [&str; 36] = [
         "zombie",
         // ShulkerBullet.getSoundSource: HOSTILE (ShulkerBullet.java:63).
         "shulker_bullet",
