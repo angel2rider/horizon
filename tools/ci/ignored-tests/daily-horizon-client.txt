@@ -6,6 +6,10 @@ horizon-client game::api_values::read_stack_tests::read_consumers_forward_nonres
 horizon-client game::big_dripleaf_tests::a_leaf_stays_flat_under_an_entity_that_cannot_tilt_it lib daily resources
 horizon-client game::big_dripleaf_tests::a_leaf_tilts_under_a_mob_an_item_a_boat_a_minecart_and_a_trident lib daily resources
 horizon-client game::commands::modprofile::tests::modprofile_state_and_report_side_effects lib daily child-process
+horizon-client game::commands::profiles::save_all_command_tests::a_failed_save_fails_at_the_source_only lib daily resources
+horizon-client game::commands::profiles::save_all_command_tests::a_guests_save_all_reaches_the_other_operators lib daily resources
+horizon-client game::commands::profiles::save_all_command_tests::a_save_all_keeps_the_feedback_rule_of_its_command lib daily resources
+horizon-client game::commands::profiles::save_all_command_tests::every_source_of_a_guests_save_all_keeps_its_feedback lib daily resources
 horizon-client game::commands::selector_bounds_tests::actual_selector_uses_body_overlap_but_distance_stays_at_the_origin lib daily game-boot
 horizon-client game::commands::world_cmds::allay_owner_damage_tests::allay_owner_adapters_compare_the_actual_player_uuid lib daily game-boot
 horizon-client game::container_loot::tests::commands_clone_and_structures lib daily child-process
@@ -52,6 +56,10 @@ horizon-client game::gui_clips::dispatch_tests::a_hook_call_clips_what_its_mod_d
 horizon-client game::gui_entity::tests::a_screen_draws_a_mob_by_type_once_and_refuses_what_it_cant_draw lib daily game-boot
 horizon-client game::initial_spawn_tests::a_spawn_search_follows_the_level_seed lib daily resources
 horizon-client game::item_entities::orb_pickup_tests::a_player_picks_a_random_orb_not_the_first lib daily resources
+horizon-client game::lan_actions::admin_feedback::tests::a_level_zero_operator_hears_another_operators_command lib daily resources
+horizon-client game::lan_actions::admin_feedback::tests::a_level_zero_splitscreen_seat_hears_no_admin_line lib daily resources
+horizon-client game::lan_actions::admin_feedback::tests::an_integrated_server_without_commands_tells_no_one lib daily resources
+horizon-client game::lan_actions::admin_feedback::tests::only_the_owner_hears_an_integrated_servers_guest_command lib daily resources
 horizon-client game::lan_actions::pickup_xp_tests::a_guest_picks_an_orb_with_their_own_random lib daily resources
 horizon-client game::lan_entities::tests::glowing_display_metadata_reaches_the_model_silhouettes lib daily resources
 horizon-client game::last_hurt_by_player_tests::a_death_without_a_causing_entity_is_no_murder lib daily resources
@@ -193,6 +201,7 @@ horizon-client game::persist::completion_tests::nosave_riders_transfer_live_with
 horizon-client game::persist::completion_tests::registered_nosave_riders_are_live_but_not_serialized_or_vehicles lib daily resources
 horizon-client game::persist::completion_tests::valid_nonmob_rider_is_live_and_merge_does_not_adopt_passengers lib daily resources
 horizon-client game::persist::lookup_order_tests::orbs_keep_their_section_entry_order_after_reload lib daily resources
+horizon-client game::piglins::tests::an_alerted_zombified_piglin_targets_the_attacker_not_its_nearest_player lib daily resources
 horizon-client game::rectangular_recipe_remainder_tests::rectangular_recipe_for_preserves_two_custom_remainder_cells lib daily resources
 horizon-client game::remote::interaction_event_tests::mapping_press_tests::a_callback_click_survives_until_the_next_tick lib daily resources
 horizon-client game::remote::interaction_event_tests::mapping_press_tests::a_screen_drops_the_clicks_and_holds_nothing lib daily resources
@@ -215,6 +224,13 @@ horizon-client game::remote::tests::predicted_block_notice_tests::local_break_no
 horizon-client game::remote::tests::predicted_block_notice_tests::ordinary_server_write_is_not_predicted lib daily game-boot
 horizon-client game::remote::tests::predicted_block_notice_tests::pre_ack_server_update_stays_unheard_and_unapplied lib daily game-boot
 horizon-client game::remote::tests::predicted_block_notice_tests::unapplied_guesses_are_unheard lib daily game-boot
+horizon-client game::remote_vehicles::creative_flight_tests::a_camel_second_passenger_cannot_toggle_creative_flight lib daily resources
+horizon-client game::remote_vehicles::creative_flight_tests::a_pending_auto_jump_from_walking_does_not_block_the_riders_toggle lib daily resources
+horizon-client game::remote_vehicles::creative_flight_tests::a_refused_flight_toggle_keeps_the_servers_flying_speed lib daily child-process
+horizon-client game::remote_vehicles::creative_flight_tests::a_rider_flight_toggle_sends_one_ability_packet_from_the_client_tick lib daily resources
+horizon-client game::remote_vehicles::creative_flight_tests::a_riding_player_double_jump_toggles_creative_flight lib daily resources
+horizon-client game::remote_vehicles::creative_flight_tests::a_sitting_camel_first_passenger_cannot_toggle_creative_flight lib daily resources
+horizon-client game::remote_vehicles::creative_flight_tests::ctrl_pick_with_include_data_prints_another_players_profile lib daily resources
 horizon-client game::runtime_levels_tests::a_level_the_player_left_in_single_player_still_unloads_and_deletes lib daily resources
 horizon-client game::screen_render_phase_tests::chest_render_phases_cover_panel_but_preserve_items_tooltips_and_carried_stack lib daily resources # HORIZON_TEST_RESOURCES and software Vulkan required.
 horizon-client game::screen_render_phase_tests::title_post_hook_draws_a_packaged_wide_gui_sprite_before_world_open lib daily resources

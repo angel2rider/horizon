@@ -18,8 +18,10 @@ pub fn set_source_volumes(volumes: [f32; 11]) {
 pub fn sound_source(event: &str) -> usize {
     let e = event.trim_start_matches("minecraft:");
     let index = |name: &str| SOUND_SOURCES.iter().position(|n| *n == name).unwrap_or(0);
-    const HOSTILE: [&str; 41] = [
+    const HOSTILE: [&str; 42] = [
         "zombie",
+        // ShulkerBullet.getSoundSource: HOSTILE (ShulkerBullet.java:63).
+        "shulker_bullet",
         "skeleton",
         // Shulker and Hoglin override getSoundSource; Zoglin and Creaking
         // extend Monster. All four are HOSTILE in pinned vanilla 26.3.
@@ -931,6 +933,11 @@ pub enum Opt {
     /// Horizon's controller settings (`horizon-controller.txt`).
     PadEnabled,
     PadVibration,
+    /// How hard the handles (and the pad's own rumble actuators) buzz
+    /// (`PadSettings::vibration_strength`).
+    PadVibrationStrength,
+    /// How hard an Xbox pad's impulse triggers buzz (`PadSettings::impulse_strength`).
+    PadImpulseStrength,
     PadPlayInBackground,
     PadAdaptiveTriggers,
     PadLightbar,
@@ -1058,6 +1065,8 @@ mod tests {
             ("block.note_block.harp", 2),
             ("block.note_block.imitate.creeper", 2),
             ("block.note_block.trumpet_exposed", 2),
+            ("entity.shulker_bullet.hit", 5),
+            ("entity.shulker_bullet.hurt", 5),
             ("entity.shulker.ambient", 5),
             ("entity.hoglin.ambient", 5),
             ("entity.zoglin.ambient", 5),
