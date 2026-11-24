@@ -90,14 +90,16 @@ class ProcessTreeTests(unittest.TestCase):
         signaled = []
 
         def record_killpg(group, sig):
-            signaled.append((group, harness.returncode))  # returncode at signal time: None means pre-reap
+            # Still waitable without reaping (WNOWAIT): the kernel, not returncode, says the leader is unreaped.
+            waitable = os.waitid(os.P_PID, harness.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+            signaled.append((group, waitable is not None and waitable.si_pid == harness.pid))
             return real_killpg(group, sig)
 
         with mock.patch.object(process_tree.os, "killpg", record_killpg):
             self.assertEqual(process_tree.wait(harness, 30), 0)
         self.assertEqual(len(signaled), 1, "the group was not signalled exactly once")
         self.assertEqual(signaled[0][0], harness.pid)
-        self.assertIsNone(signaled[0][1], "the group was signalled after the leader had been reaped")
+        self.assertTrue(signaled[0][1], "the group was signalled after the leader had been reaped")
         self.assertTrue(output.closed(30), "the harness's child outlived wait()")
 
     @unittest.skipUnless(os.name != "nt", "POSIX-only: a reaped leader's group id is unsafe to signal")
