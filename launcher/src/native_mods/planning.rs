@@ -4,31 +4,28 @@ use super::*;
 /// Plan enabled native mods for an instance. Worker-only filesystem and release reads.
 pub fn routes(home: &Path, base: Option<&str>) -> Result<Routes, Failed> {
     require_consent()?;
-    let lease = crate::native_cache::Cache::acquire(&backend::build_dir()).map_err(cache_error)?;
-    let Some(folder) = stage_installed(home, root().join("installed.routes"))? else {
+    let _turn = check_turn()?;
+    let Some(folder) = stage_installed(home, root().join(CHECKED))? else {
         return Ok(Routes::default());
     };
-    classify(&folder, base, &lease)
+    classify(&folder, base)
 }
 
-/// Share classification with an actual build under its existing cache lease.
-pub(super) fn classify(
-    folder: &Path,
-    base: Option<&str>,
-    // Held while the SDK's index, surface and build data are read and kept.
-    lease: &crate::native_cache::Cache,
-) -> Result<Routes, Failed> {
-    classify_until(folder, base, lease, &|| Ok(()))
+/// Where the checks stage the installed mods. Not `installed.routes`, which an older launcher
+/// stages into under the build lease and would delete beside a check of this one.
+pub(super) const CHECKED: &str = "installed.checked";
+
+/// The route and update checks' own lock: they stage the installed mods into one folder, one
+/// check at a time. They never take the build lease, so a check fetching the SDK's files can't
+/// make a Build the player starts meanwhile wait or fail (#19294); the SDK's files are kept so
+/// that a check and a build can fetch them at once.
+fn check_turn() -> Result<crate::native_cache::Locked, Failed> {
+    crate::native_cache::side_lock(&backend::build_dir(), "installed.checked.lock")
+        .map_err(|error| cache_error(error).into())
 }
 
-/// [`classify`] for a build: `stop` (its [`check_cancelled`]) is asked while the build data
-/// downloads, and a stop ends the classification as [`CANCELLED`] rather than as a mod's route.
-pub(super) fn classify_until(
-    folder: &Path,
-    base: Option<&str>,
-    _lease: &crate::native_cache::Cache,
-    stop: &dyn Fn() -> Result<(), String>,
-) -> Result<Routes, Failed> {
+/// Each mod's route. The SDK's index and surface it reads and keeps need no build lease.
+pub(super) fn classify(folder: &Path, base: Option<&str>) -> Result<Routes, Failed> {
     let found = scan_bundles(folder)?;
     let mut result = Routes::default();
     let mut projects = Vec::new();
@@ -83,7 +80,7 @@ pub(super) fn classify_until(
             *slot = route;
         }
     };
-    match judge_all(&projects, &sdk, &sdk_base, stop) {
+    match judge_all(&projects, &sdk, &sdk_base) {
         Err(sdk_cache::Refusal::Cancelled) => return Err(Failed::Other(CANCELLED.into())),
         Ok(verdicts) => {
             for (id, verdict) in verdicts {
@@ -92,11 +89,7 @@ pub(super) fn classify_until(
                     fit::Verdict::Fits { .. } => Route::Fits {
                         line: fit::line(&id, &verdict, &shown),
                     },
-                    _ => Route::Unfit {
-                        headline: fit::headline(&id, &verdict),
-                        line: fit::line(&id, &verdict, &shown),
-                        actions: fit::actions(&id),
-                    },
+                    _ => fit::unfit_route(&id, &verdict, &shown),
                 };
                 said(id.as_str(), route);
             }
@@ -143,8 +136,8 @@ pub struct UpdateCheck {
 /// or Nightly `to`. Worker-only: it reads releases.
 pub fn update_check(home: &Path, to: &str) -> Result<UpdateCheck, Failed> {
     require_consent()?;
-    let _lease = crate::native_cache::Cache::acquire(&backend::build_dir()).map_err(cache_error)?;
-    let found = match stage_installed(home, root().join("installed.routes"))? {
+    let _turn = check_turn()?;
+    let found = match stage_installed(home, root().join(CHECKED))? {
         Some(folder) => scan_bundles(&folder)?,
         None => Vec::new(),
     };
@@ -160,17 +153,14 @@ pub fn update_check(home: &Path, to: &str) -> Result<UpdateCheck, Failed> {
     let sdk_base = sdk_cache::Base::from_env();
     let keys = horizon_release_sign::sdk_keys_for(backend::REPO);
     let sdk = sdk_cache::index(&sdk_base, &revision, &keys).map_err(|r| r.to_string())?;
-    let verdicts = judge_all(&projects, &sdk, &sdk_base, &|| Ok(())).map_err(|r| r.to_string())?;
+    let verdicts = judge_all(&projects, &sdk, &sdk_base).map_err(|r| r.to_string())?;
     let shown = sdk.shown();
     let unfit: Vec<LeftOut> = verdicts
         .iter()
         .filter(|(_, verdict)| !verdict.usable())
         .filter_map(|(id, verdict)| {
             let bundle = found.iter().find(|b| &b.manifest.id == id)?;
-            Some(LeftOut::new(
-                bundle,
-                isolate::Why::Unfit(fit::short(verdict)),
-            ))
+            Some(LeftOut::new(bundle, fit::update_why(verdict)))
         })
         .collect();
     let declared: Vec<Vec<dependencies::Dependency>> = found
@@ -188,20 +178,6 @@ pub fn update_check(home: &Path, to: &str) -> Result<UpdateCheck, Failed> {
         .map(|(b, d)| (b, d.as_slice()))
         .collect();
     let left = isolate::with_dependents(&unfit, &pairs);
-    let off: Vec<(String, String)> = left
-        .iter()
-        .map(|l| {
-            let why = match &l.why {
-                isolate::Why::Unfit(why) => why.clone(),
-                isolate::Why::Needs(library) => trf(
-                    "it needs {library}, which doesn't fit",
-                    &[("library", library)],
-                ),
-                _ => String::new(),
-            };
-            (l.id.clone(), why)
-        })
-        .collect();
     let ids: Vec<String> = left.iter().map(|l| l.id.clone()).collect();
     let all = crate::worlds::list(home);
     let worlds = crate::worlds::saved_with(&all, &ids)
@@ -210,7 +186,7 @@ pub fn update_check(home: &Path, to: &str) -> Result<UpdateCheck, Failed> {
         .collect();
     Ok(UpdateCheck {
         to: to.to_owned(),
-        summary: fit::update_summary(&shown, found.len(), &off),
+        summary: fit::update_summary(&shown, found.len(), &left),
         worlds,
     })
 }
