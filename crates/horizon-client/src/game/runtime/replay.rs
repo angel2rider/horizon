@@ -78,6 +78,20 @@ impl Replay {
         self.driver.as_ref()?.as_any().downcast_ref()
     }
 
+    pub(super) fn take_replaced_recording(
+        &mut self,
+        export: Option<&mut super::export::Session>,
+        renderer: Option<&mut super::Renderer>,
+    ) -> Option<String> {
+        self.driver.as_ref()?;
+        if let Some(export) = export {
+            export.interrupt_for_replay_close(renderer);
+        }
+        self.driver = None;
+        self.reported_ms = None;
+        Some(std::mem::take(&mut self.recording))
+    }
+
     fn recording_error(
         &mut self,
         status: Option<&horizon_client::net::RecorderStatus>,
@@ -467,6 +481,14 @@ impl Game<'_> {
     /// `init_remote_for_replay` makes anew), back as a fresh open has it, so the world rebuilt
     /// from the start shows only what the packets replayed set.
     fn reset_replay_world_extras(&mut self) {
+        // A new LocalPlayer holds nothing (vanilla's handleLogin): the snapshot sends only the
+        // slots that were full, so an item the replaced session held must not stay in an empty
+        // slot.
+        self.inventory = vec![None; 36];
+        self.offhand = None;
+        self.armor = [None, None, None, None];
+        // The snapshot says weather only when there is a storm, and a Login keeps the world's.
+        self.world.weather = Default::default();
         self.border = Default::default();
         self.tab_list = Default::default();
         self.score.board = Default::default();
@@ -935,21 +957,21 @@ impl Game<'_> {
 
         let duration_ms = driver.duration_ms();
         let packets = driver.packet_count();
-        self.studio_replay_opened(&driver);
-        if self.replay.driver.is_none() {
-            self.replay.previous_camera_type = Some(self.camera_type);
-            self.replay.standalone = standalone;
-        } else {
+        if let Some(previous) = self
+            .replay
+            .take_replaced_recording(self.export.as_mut(), self.renderer.as_mut())
+        {
             // A replay opened over another: mods hear the old one close before the new one opens.
-            self.replay.driver = None;
-            self.replay.reported_ms = None;
             // The kept synthetic session isn't made anew, so what the old recording set outside
             // it goes here.
             self.ui.chat.clear();
             self.reset_replay_world_extras();
-            let previous = std::mem::take(&mut self.replay.recording);
             self.native_replay_closed(&previous);
+        } else {
+            self.replay.previous_camera_type = Some(self.camera_type);
+            self.replay.standalone = standalone;
         }
+        self.studio_replay_opened(&driver);
         self.replay.recording = recording.clone();
         self.replay.archive = archive;
         self.replay.identity = identity;
@@ -1026,12 +1048,8 @@ impl Game<'_> {
     /// The replay itself ends: its edits saved, its driver dropped, mods told `replay_closed`.
     /// The session it played on is left as it is. False when no replay was installed.
     pub(super) fn end_studio_replay(&mut self) -> bool {
-        if self
-            .export
-            .as_ref()
-            .is_some_and(|s| s.replay_alpha().is_some())
-        {
-            self.begin_export_drain("stopped");
+        if let Some(export) = &mut self.export {
+            export.interrupt_for_replay_close(self.renderer.as_mut());
         }
         self.studio_replay_closing();
         if self.replay.driver.take().is_none() {
@@ -1065,6 +1083,52 @@ impl Game<'_> {
     pub(super) fn drop_stale_replay(&mut self) {
         if self.replay.driver.is_some() && self.replay.connection != self.replay.connections {
             self.end_studio_replay();
+        }
+    }
+
+    /// What the client holds of the session outside the world's chunks, for the recording's
+    /// snapshot ([`horizon_client::studio::snapshot`]).
+    fn session_snapshot_state(
+        &self,
+        r: &super::remote::Remote,
+    ) -> horizon_client::studio::snapshot::SessionState {
+        use horizon_client::studio::snapshot::SessionState;
+        let held = |slot: i32, stack: &Option<horizon_client::items::ItemStack>| {
+            self.to_network(stack).map(|stack| (slot, stack))
+        };
+        let inventory = self
+            .inventory
+            .iter()
+            .enumerate()
+            .filter_map(|(slot, stack)| held(slot as i32, stack))
+            // Inventory slots 36 to 39 are feet to head; `armor` is head first.
+            .chain(
+                self.armor
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, stack)| held(39 - i as i32, stack)),
+            )
+            .chain(held(40, &self.offhand))
+            .collect();
+        SessionState {
+            game_time: self.world.game_time,
+            // Every clock the connection holds (`ClientClockManager`), each as the tick loop has
+            // advanced it; by id, so a snapshot of the same state is the same bytes.
+            clocks: {
+                let mut clocks: Vec<_> = r.clocks.values().cloned().collect();
+                clocks.sort_by_key(|clock| clock.clock);
+                clocks
+            },
+            rain_level: self.world.weather.rain_level.1,
+            thunder_level: self.world.weather.thunder_level.1,
+            health: r.health,
+            experience: (
+                self.experience.progress,
+                self.experience.level,
+                self.experience.total,
+            ),
+            selected_slot: self.selected,
+            inventory,
         }
     }
 
@@ -1149,6 +1213,11 @@ impl Game<'_> {
         );
         record_cb(player_pos);
 
+        // 2b. The time, weather, inventory and vitals the server sent long before this recording.
+        for packet in horizon_client::studio::snapshot::packets(&self.session_snapshot_state(r)) {
+            record_cb(packet);
+        }
+
         // 3. Encode resident loaded chunks into LevelChunkWithLight packets
         let biome_names: Vec<String> = world_biomes!(self)
             .list
@@ -1189,10 +1258,62 @@ impl Game<'_> {
     }
 }
 
+/// Default registries for a standalone studio replay, populated from resource clocks
+/// so `SetTime` packets find the dimension's clock and set `world.day_time`.
+pub(super) fn replay_dynamic_registries(
+    clocks: &[String],
+    builtin: &horizon_protocol::registry::Builtin,
+) -> horizon_protocol::registry::Dynamic {
+    let mut dynamic = horizon_protocol::registry::Dynamic::default();
+    let clock_names: Vec<String> = if !clocks.is_empty() {
+        clocks.to_vec()
+    } else if let Some(builtin_clocks) = builtin.get("minecraft:world_clock") {
+        builtin_clocks.names.clone()
+    } else {
+        vec!["minecraft:overworld".into()]
+    };
+    dynamic.registries.insert(
+        "minecraft:world_clock".into(),
+        clock_names.into_iter().map(|n| (n, None)).collect(),
+    );
+    dynamic
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use horizon_client::net::RecorderStatus;
+
+    /// Vanilla's `world_clock` registry has `minecraft:overworld` and `minecraft:the_end`; a
+    /// recorded `SetTime` names a clock by its id there, and `Remote::resolve_clocks` finds the
+    /// dimension's clock by name.
+    #[test]
+    fn a_replay_without_registry_data_still_names_the_world_clocks() {
+        let builtin = horizon_protocol::registry::Builtin::default();
+        let none = replay_dynamic_registries(&[], &builtin);
+        assert_eq!(
+            none.id("minecraft:world_clock", "minecraft:overworld"),
+            Some(0)
+        );
+        let listed = [
+            "minecraft:overworld".to_owned(),
+            "minecraft:the_end".to_owned(),
+        ];
+        let dynamic = replay_dynamic_registries(&listed, &builtin);
+        assert_eq!(
+            dynamic.id("minecraft:world_clock", "minecraft:overworld"),
+            Some(0)
+        );
+        assert_eq!(
+            dynamic.id("minecraft:world_clock", "minecraft:the_end"),
+            Some(1)
+        );
+        assert_eq!(
+            dynamic.name("minecraft:world_clock", 1),
+            Some("minecraft:the_end")
+        );
+        assert_eq!(dynamic.name("minecraft:world_clock", 2), None);
+    }
 
     #[test]
     fn recording_failure_is_notified_once_and_rearms_for_a_new_session() {
