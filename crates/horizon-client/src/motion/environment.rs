@@ -140,8 +140,8 @@ impl MotionWorld<'_, '_, '_> {
             self.player.ignite_for_ticks(300)?;
             if self.environment_hurt("minecraft:lava", 4.0)? {
                 // Entity.lavaHurt: GENERIC_BURN at 0.4 and
-                // 2.0 + random.nextFloat() * 0.4.
-                let pitch = 2.0 + self.scene.random.next_float() * 0.4;
+                // 2.0 + random.nextFloat() * 0.4, the entity's own random.
+                let pitch = 2.0 + self.player.random.next_float() * 0.4;
                 self.player.events.push(MotionEvent::LavaBurn { pitch });
             }
         }
