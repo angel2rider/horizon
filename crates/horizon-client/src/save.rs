@@ -669,6 +669,20 @@ fn merge_block_entity(original: &Tag, loaded: &Tag, current: &Tag) -> Tag {
         map.remove(&"LootTable".into());
         map.remove(&"LootTableSeed".into());
     }
+    if crate::block_entity_nbt::id(current).as_deref() == Some("minecraft:trial_spawner")
+        && let Tag::Compound(map) = &mut merged
+    {
+        for key in ["normal_config", "ominous_config"] {
+            match current.get(key) {
+                Some(value) => {
+                    map.insert(key.into(), value.clone());
+                }
+                None => {
+                    map.remove(&key.into());
+                }
+            }
+        }
+    }
     merged
 }
 /// `BlockDataAccessor.getData` (`BlockEntity.saveWithFullMetadata`): the tag
@@ -690,6 +704,62 @@ pub fn block_entity_data(
         }
     }
     tag
+}
+/// `BlockEntity.saveWithFullMetadata` for a modelled entity: the model's
+/// fields plus what Horizon keeps only in the tag it was loaded with (the
+/// `components` a type stores, a container's `lock`, other unmodelled keys),
+/// merged the way a chunk save merges them. `source` is that loaded tag,
+/// `custom_name` is `BaseContainerBlockEntity.name` and `lock` is its
+/// `LockCode`; the result omits the chunk-only `keepPacked`.
+pub fn full_block_entity_data(
+    p: (i32, i32, i32),
+    e: &crate::containers::BlockEntity,
+    block: &str,
+    source: Option<&Tag>,
+    custom_name: Option<&Tag>,
+    lock: Option<&Tag>,
+) -> Tag {
+    let mut current = block_entity_data(p, e, block, lock);
+    if let Some(name) = custom_name
+        && let Tag::Compound(map) = &mut current
+    {
+        map.insert("CustomName".into(), name.clone());
+    }
+    let merged = match source {
+        Some(original)
+            if crate::block_entity_nbt::id(original) == crate::block_entity_nbt::id(&current) =>
+        {
+            let loaded = decode_block_entity(original).map_or_else(
+                || current.clone(),
+                |(q, e)| {
+                    let mut loaded = block_entity_encode::encode(q, &e, block);
+                    if !matches!(
+                        e,
+                        crate::containers::BlockEntity::Banner(_)
+                            | crate::containers::BlockEntity::Sign(_)
+                            | crate::containers::BlockEntity::Mod(_)
+                    ) && let Some(name) = original
+                        .get("CustomName")
+                        .and_then(crate::block_entity_nbt::component)
+                        && let Tag::Compound(map) = &mut loaded
+                    {
+                        // BaseContainerBlockEntity.loadAdditional: the
+                        // external name is also part of the loaded model. Its
+                        // removal must win over the source overlay.
+                        map.insert("CustomName".into(), name);
+                    }
+                    loaded
+                },
+            );
+            merge_block_entity(original, &loaded, &current)
+        }
+        _ => current,
+    };
+    let mut saved = crate::block_entity_nbt::canonical(&merged).unwrap_or(merged);
+    if let Tag::Compound(map) = &mut saved {
+        map.remove(&"keepPacked".into());
+    }
+    saved
 }
 /// `BannerBlockEntity.loadAdditional` (and the `components` a block entity keeps).
 pub fn decode_banner(tag: &Tag) -> crate::containers::Banner {
@@ -1903,13 +1973,21 @@ impl RegionFiles {
     /// Close the least recently used regions until there is room for one
     /// more, as `RegionFileStorage.getRegionFile` does. A region a reader or
     /// the writer still holds stays: closing it under them would let a
-    /// second handle read a header older than its sectors.
+    /// second handle read a header older than its sectors. So does one with
+    /// changes a failed sync left staged: opened again, it would take the
+    /// header in the file, maybe not the one on the disk, and reuse sectors
+    /// that header on the disk still names.
     fn make_room(&mut self) {
         while self.regions.len() >= MAX_OPEN_REGIONS {
             let oldest = self
                 .regions
                 .iter()
-                .filter(|(_, (r, _))| r.as_ref().is_none_or(|r| Arc::strong_count(r) == 1))
+                .filter(|(_, (r, _))| {
+                    r.as_ref().is_none_or(|r| {
+                        Arc::strong_count(r) == 1
+                            && r.try_lock().is_ok_and(|r| !r.has_staged_changes())
+                    })
+                })
                 .min_by_key(|(_, (_, used))| *used)
                 .map(|(key, _)| *key);
             let Some(key) = oldest else {
@@ -1939,9 +2017,8 @@ fn cached_region(
         return Ok(cached.clone());
     }
     cache.make_room();
-    if create && let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
+    // `open_writable` makes the missing folders, and the region's first
+    // sync makes their names durable with the file's.
     // A file this process can't write (a read-only world) is still read.
     let region = match RegionFile::open_writable(path, create) {
         Err(e) if !create && e.kind() == std::io::ErrorKind::PermissionDenied => {
@@ -2000,7 +2077,10 @@ fn write_region_records(
                 None => changed |= region.clear(*pos, timestamp)?,
             }
         }
-        if changed {
+        // A clear retried after a failed sync changes nothing: the header in
+        // memory has the chunk gone already, but only a sync puts it on the
+        // disk.
+        if changed || region.has_staged_changes() {
             region.sync()?;
         }
     }
@@ -2281,7 +2361,9 @@ pub struct SaveDir {
     /// The Overworld's old-world blending cache, read when a save is requested
     /// (installed where `SavedOldWorld` is made for this same folder).
     blending_lookup: OnceLock<BlendingLookup>,
-    /// Lazy canonical section palette cache budget for repeated chunk saves.
+    /// Byte budget of the canonical section palettes its saves leave cached
+    /// on resident sections. Its own until [`Self::share_section_palettes`]
+    /// joins it to another level's folder of the same world.
     section_palettes: Arc<SavedPaletteBudget>,
 }
 fn intern_saved_fluids(root: &NamedTag) {
@@ -2442,6 +2524,11 @@ impl SaveDir {
     /// Mark this as a server-owned world save, not a remote cache.
     pub fn enable_trusted_fluid_load(&mut self) {
         self.trusted_fluid_load = true;
+    }
+    /// Cache section palettes under `other`'s budget, so the levels of one
+    /// world share one cap instead of one each. Set before this folder saves.
+    pub fn share_section_palettes(&mut self, other: &SaveDir) {
+        self.section_palettes = Arc::clone(&other.section_palettes);
     }
     /// Lets saves of this folder take an old chunk's calculated blending data
     /// (`lookup` must not calculate). Set once, before the folder saves.
@@ -3054,6 +3141,29 @@ pub fn write_dat(path: &Path, tag: Tag) -> Result<()> {
     write_dat_as(path, tag, false)
 }
 
+/// Validate the NBT that a reload will see before replacing either file.
+pub fn write_dat_checked(
+    path: &Path,
+    tag: Tag,
+    validate: impl FnOnce(&Tag, &Tag) -> bool,
+) -> Result<bool> {
+    let root = NamedTag {
+        name: "".into(),
+        tag,
+    };
+    let Ok(bytes) = nbt::write_named(&root, Limits::saved()) else {
+        return Ok(false);
+    };
+    let Ok((saved, _)) = crate::recipe_book::read_saved(&bytes) else {
+        return Ok(false);
+    };
+    if !validate(&root.tag, &saved.tag) {
+        return Ok(false);
+    }
+    write_dat_bytes(path, &bytes, false)?;
+    Ok(true)
+}
+
 /// [`write_dat`], synced to the disk: the new file before it is renamed into place, and the
 /// folder after, so a power loss leaves the old file or the new one. A hand-over's commit
 /// point (`player-confirm`) replies only once its files are.
@@ -3105,9 +3215,6 @@ fn sync_folder(path: &Path) -> std::io::Result<()> {
 }
 
 fn write_dat_as(path: &Path, tag: Tag, durable: bool) -> Result<()> {
-    if let Some(dir) = path.parent() {
-        fs::create_dir_all(dir)?;
-    }
     let bytes = nbt::write_named(
         &NamedTag {
             name: "".into(),
@@ -3116,7 +3223,14 @@ fn write_dat_as(path: &Path, tag: Tag, durable: bool) -> Result<()> {
         Limits::saved(),
     )
     .map_err(|e| e.to_string())?;
-    let compressed = Compression::Gzip.encode(&bytes)?;
+    write_dat_bytes(path, &bytes, durable)
+}
+
+fn write_dat_bytes(path: &Path, bytes: &[u8], durable: bool) -> Result<()> {
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    let compressed = Compression::Gzip.encode(bytes)?;
     let file = path
         .file_name()
         .and_then(|n| n.to_str())

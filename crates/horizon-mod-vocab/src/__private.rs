@@ -203,6 +203,34 @@ pub mod built {
             biome,
         }
     }
+    /// A retained material run, constructed by the game from the LOD tile.
+    pub fn lod_column_footprint(
+        min_y: i16,
+        top_y: i16,
+        state: crate::BlockStateId,
+        biome: String,
+        sky_light: u8,
+        block_light: u8,
+    ) -> crate::LodColumnFootprint {
+        crate::LodColumnFootprint {
+            min_y,
+            top_y,
+            state,
+            biome,
+            sky_light,
+            block_light,
+        }
+    }
+    /// A retained LOD tile's exact cell ordering and scale.
+    pub fn lod_tile_footprint(
+        cell_width: i32,
+        columns: Vec<Option<crate::LodColumnFootprint>>,
+    ) -> crate::LodTileFootprint {
+        crate::LodTileFootprint {
+            cell_width,
+            columns,
+        }
+    }
     /// The replay this window plays, constructed by the game and only read by mods.
     pub fn replay_state(
         recording: String,
@@ -221,6 +249,20 @@ pub mod built {
             speed,
             paused,
             ended,
+        }
+    }
+    /// The mod export's status snapshot, constructed by the game.
+    pub fn export_status(
+        request: u32,
+        name: String,
+        state: crate::ExportState,
+        [frame, frames]: [u32; 2],
+        [width, height]: [u32; 2],
+        (fps_num, fps_den): (u32, u32),
+        bytes: u64,
+    ) -> crate::ExportStatus {
+        crate::ExportStatus {
+            request, name, state, frame, frames, width, height, fps_num, fps_den, bytes,
         }
     }
     /// Wrap a slot in the persistent instance group store.
@@ -271,6 +313,10 @@ pub mod game {
     /// A boss bar handle the game names.
     pub fn boss_bar_ref(epoch: WorldEpoch, uuid: u128) -> BossBarRef {
         BossBarRef { epoch, uuid }
+    }
+    /// A team handle the game names.
+    pub fn team_ref(epoch: WorldEpoch, name: String) -> TeamRef {
+        TeamRef { epoch, name }
     }
     /// A chunk handle the game names.
     pub fn chunk_ref(level: LevelRef, pos: [i32; 2]) -> ChunkRef {
@@ -386,6 +432,21 @@ pub mod game {
             BossBarRefFields {
                 epoch: self.epoch,
                 uuid: self.uuid,
+            }
+        }
+    }
+
+    #[non_exhaustive]
+    pub struct TeamRefFields<'a> {
+        pub epoch: WorldEpoch,
+        pub name: &'a str,
+    }
+    impl Fields for TeamRef {
+        type Fields<'a> = TeamRefFields<'a>;
+        fn fields(&self) -> TeamRefFields<'_> {
+            TeamRefFields {
+                epoch: self.epoch,
+                name: &self.name,
             }
         }
     }
@@ -634,7 +695,5 @@ pub fn fluid_state(
 
 #[path = "__private/ingredient_parser.rs"]
 pub mod ingredient_parser;
-#[path = "__private/points.rs"]
-pub mod points;
 
 include!(concat!(env!("OUT_DIR"), "/mod_api_exports_private.rs"));
