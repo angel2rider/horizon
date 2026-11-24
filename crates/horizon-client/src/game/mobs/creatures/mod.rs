@@ -5891,29 +5891,16 @@ impl Game<'_> {
             }
             (ProjectileKind::EnderPearl, hit) => {
                 // ThrownEnderpearl.onHit: 32 PORTAL particles at the impact,
-                // drawn from the pearl's own random before the teleport.
+                // drawn from the pearl's own random before the teleport. The
+                // server's addParticle sends nothing: each client draws its own
+                // burst where the pearl lands there (`remote_projectile_tick`).
                 let mut random = p.random.0.clone();
                 let portal = horizon_client::particles::ParticleOptions::simple(
                     horizon_client::particles::ParticleType::Portal,
                 );
-                for _ in 0..32 {
-                    let at = [
-                        p.position.x,
-                        p.position.y + random.next_double() * 2.0,
-                        p.position.z,
-                    ];
-                    let v = [random.next_gaussian(), 0.0, random.next_gaussian()];
+                let sparks = super::remote_projectiles::ender_pearl_sparks(p.position, &mut random);
+                for (at, v) in sparks {
                     self.particles.add(&portal, at, v);
-                    self.lan_send_particles(super::lan_particles::QueuedParticle {
-                        dimension: self.dim.id(),
-                        options: portal.clone(),
-                        state: None,
-                        at,
-                        spread: [0.0; 3],
-                        speed: v,
-                        count: 1,
-                        randomization: 1,
-                    });
                 }
                 if let Hit::Entity {
                     who: Who::Player, ..
