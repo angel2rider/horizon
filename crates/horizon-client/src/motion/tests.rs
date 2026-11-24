@@ -435,6 +435,28 @@ fn a_lava_cauldron_burns_the_player_inside_it() {
     assert!(player.health.health() < 20.0, "the lava must hurt");
     assert!(player.fire_ticks > 0, "the lava must ignite");
     assert_eq!(player.ticks_frozen, 0);
+    // Entity.lavaHurt: the landed hit plays GENERIC_BURN once, at
+    // 2.0 + nextFloat() * 0.4.
+    let burns = |p: &PlayerMotion| -> Vec<f32> {
+        p.events
+            .iter()
+            .filter_map(|e| match e {
+                MotionEvent::LavaBurn { pitch } => Some(*pitch),
+                _ => None,
+            })
+            .collect()
+    };
+    let landed = burns(&player);
+    assert_eq!(landed.len(), 1, "one burn sound for the landed hit");
+    assert!((2.0..2.4).contains(&landed[0]), "pitch {}", landed[0]);
+    // The next hit falls inside the hurt cooldown and is refused: no sound.
+    tick(&mut player);
+    assert_eq!(burns(&player).len(), 1);
+    // A player the lava can't hurt hears nothing either.
+    let mut immune = PlayerMotion::new(resources, Vec3::new(20.5, 4.25, 20.5)).unwrap();
+    immune.invulnerable = true;
+    tick(&mut immune);
+    assert!(burns(&immune).is_empty());
     // Beside it, nothing.
     let mut away = PlayerMotion::new(resources, Vec3::new(22.5, 4.0, 20.5)).unwrap();
     tick(&mut away);

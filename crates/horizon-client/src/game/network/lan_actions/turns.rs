@@ -1021,6 +1021,7 @@ impl Game<'_> {
                     source,
                 }) => self.guest_damage_broadcast(conn, source),
                 MotionEvent::HurtSound(sound) => self.guest_hurt_sound(conn, sound),
+                MotionEvent::LavaBurn { pitch } => self.guest_lava_burn(conn, pitch),
                 _ => {}
             }
         }
@@ -1107,6 +1108,26 @@ impl Game<'_> {
         };
         self.audio.play_unshared(sound, Some(at), 1.0, 1.0);
         self.send_level_sound(LevelSound::new(sound, at, 1.0, 1.0), Some(conn));
+    }
+
+    /// `Entity.lavaHurt`'s GENERIC_BURN for a guest whose lava hit landed:
+    /// `playSound(null, ...)` in the player's source reaches every player
+    /// around, the burning one included.
+    pub(super) fn guest_lava_burn(&mut self, conn: u32, pitch: f32) {
+        let Some(at) = self
+            .lan
+            .as_ref()
+            .and_then(|host| host.hub.guest(conn))
+            .map(|g| g.position)
+        else {
+            return;
+        };
+        let sound = "minecraft:entity.generic.burn";
+        self.audio.play_unshared(sound, Some(at), 0.4, pitch);
+        self.send_level_sound(
+            LevelSound::new(sound, at, 0.4, pitch).in_source(mod_api::SoundSource::Players),
+            None,
+        );
     }
 
     /// `ServerLevel.players()` in turn: the host's own player, then each

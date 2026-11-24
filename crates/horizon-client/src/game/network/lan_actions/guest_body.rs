@@ -466,6 +466,7 @@ impl Game<'_> {
                 // reaches every player around but the hurt one, whose own
                 // client plays it from handleDamageEvent (arismoko/horizon#4149).
                 MotionEvent::HurtSound(sound) => self.guest_hurt_sound(conn, sound),
+                MotionEvent::LavaBurn { pitch } => self.guest_lava_burn(conn, pitch),
                 // LivingEntity.checkFallDamage: the crumbs reach every player.
                 MotionEvent::Fall(horizon_client::landing::FallEvent::Particles {
                     state,
